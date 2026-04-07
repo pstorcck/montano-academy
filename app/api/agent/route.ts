@@ -2,20 +2,19 @@ import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 import { NextRequest, NextResponse } from 'next/server'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export async function POST(req: NextRequest) {
   try {
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+
     const { messages, company_slug, conversation_id, user_id } = await req.json()
 
-    // Obtener company_id primero
     const { data: company } = await supabase
       .from('companies')
       .select('id')
@@ -26,7 +25,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
     }
 
-    // Obtener el agente de esa empresa
     const { data: agentConfig, error: agentError } = await supabase
       .from('agent_configs')
       .select('*')
@@ -34,11 +32,9 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (agentError || !agentConfig) {
-      console.error('Error agente:', agentError)
       return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 })
     }
 
-    // Llamar a OpenAI
     const response = await openai.chat.completions.create({
       model: agentConfig.model || 'gpt-4o',
       temperature: agentConfig.temperature || 0.7,
@@ -50,7 +46,6 @@ export async function POST(req: NextRequest) {
 
     const assistantMessage = response.choices[0].message.content || ''
 
-    // Guardar mensajes en Supabase
     if (conversation_id) {
       const lastUserMessage = messages[messages.length - 1]
       await supabase.from('messages').insert([
@@ -59,7 +54,6 @@ export async function POST(req: NextRequest) {
       ])
     }
 
-    // Detectar aprobación
     const approved = assistantMessage.includes('CERTIFICADO_APROBADO')
 
     if (approved && conversation_id) {
