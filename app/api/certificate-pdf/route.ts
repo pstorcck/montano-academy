@@ -122,13 +122,9 @@ export async function GET(req: NextRequest) {
     letter-spacing: -12px; line-height: 1;
   }
   .logo-wrap {
-    width: 88px; height: 88px;
-    border-radius: 50%;
-    border: 4px solid ${secondary};
-    background: ${primary};
+    width: 140px; height: 140px;
     margin: 0 auto 24px;
     display: flex; align-items: center; justify-content: center;
-    overflow: hidden; padding: 6px;
   }
   .logo-wrap img { width: 100%; height: 100%; object-fit: contain; }
   .issued-by {
