@@ -1,10 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+const LOGO_MAP: Record<string, string> = {
+  'colegio-montano': 'logo-cm.jpg',
+  'mac': 'logo-mac.jpg',
+  'vitanova': 'logo-vitanova.jpg',
+}
+
+function getLogoBase64(slug: string): string {
+  try {
+    const filename = LOGO_MAP[slug] || 'logo-cm.jpg'
+    const filepath = join(process.cwd(), 'public', filename)
+    const buffer = readFileSync(filepath)
+    return `data:image/jpeg;base64,${buffer.toString('base64')}`
+  } catch {
+    return ''
+  }
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -22,63 +41,41 @@ export async function GET(req: NextRequest) {
       .single()
     cert = data
   } else if (userId && companyId) {
-    // Generar certificado manual desde admin
     const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('full_name, email')
-      .eq('id', userId)
-      .single()
-
+      .from('profiles').select('full_name').eq('id', userId).single()
     const { data: company } = await supabaseAdmin
-      .from('companies')
-      .select('name, slug, primary_color, secondary_color')
-      .eq('id', companyId)
-      .single()
+      .from('companies').select('name, slug, primary_color, secondary_color').eq('id', companyId).single()
 
     if (!profile || !company) {
-      return NextResponse.json({ error: 'Usuario o empresa no encontrada' }, { status: 404 })
+      return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
     }
 
-    // Verificar si ya tiene certificado
     const { data: existingCert } = await supabaseAdmin
-      .from('certificates')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('company_id', companyId)
-      .single()
+      .from('certificates').select('*')
+      .eq('user_id', userId).eq('company_id', companyId).single()
 
     if (existingCert) {
       cert = { ...existingCert, profiles: profile, companies: company }
     } else {
-      // Crear certificado nuevo
       const year = new Date().getFullYear()
       const slug = company.slug.toUpperCase().slice(0, 2)
       const certNumber = `MA-${slug}-${year}-${Math.floor(Math.random() * 900) + 100}`
-
       const { data: newCert } = await supabaseAdmin
         .from('certificates')
-        .insert({
-          user_id: userId,
-          company_id: companyId,
-          certificate_number: certNumber,
-          score: 100,
-        })
-        .select()
-        .single()
-
+        .insert({ user_id: userId, company_id: companyId, certificate_number: certNumber, score: 100 })
+        .select().single()
       cert = { ...newCert, profiles: profile, companies: company }
     }
   }
 
-  if (!cert) {
-    return NextResponse.json({ error: 'Certificado no encontrado' }, { status: 404 })
-  }
+  if (!cert) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
 
   const primary = cert.companies?.primary_color || '#0067A9'
   const secondary = cert.companies?.secondary_color || '#FED809'
+  const slug = cert.companies?.slug || 'colegio-montano'
   const companyName = cert.companies?.name || 'Grupo Montano'
   const userName = cert.profiles?.full_name || 'Colaborador'
-  const initials = companyName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+  const logoBase64 = getLogoBase64(slug)
   const issuedDate = new Date(cert.issued_at || new Date()).toLocaleDateString('es-GT', {
     year: 'numeric', month: 'long', day: 'numeric'
   })
@@ -88,159 +85,164 @@ export async function GET(req: NextRequest) {
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Certificado - ${userName}</title>
+<title>Certificado — ${userName}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; }
   body {
     font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
-    background: #f5f5f5;
+    background: #EEECEA;
+    min-height: 100vh;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    padding: 20px;
+    padding: 32px 16px;
   }
   .cert {
-    width: 900px;
+    width: 860px;
     background: white;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-    position: relative;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.18);
+    border-radius: 2px;
     overflow: hidden;
   }
-  .bar-top { height: 12px; background: ${primary}; }
-  .bar-gold { height: 5px; background: linear-gradient(90deg, ${secondary}, ${primary}); }
-  .body { padding: 50px 90px; text-align: center; position: relative; }
+  .bar-top { height: 14px; background: ${primary}; }
+  .bar-accent { height: 5px; background: linear-gradient(90deg, ${secondary} 0%, ${primary} 100%); }
+  .body {
+    padding: 52px 100px 44px;
+    text-align: center;
+    position: relative;
+  }
   .watermark {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 200px; font-weight: 900;
-    color: ${primary}; opacity: 0.03;
+    font-size: 220px; font-weight: 900;
+    color: ${primary}; opacity: 0.025;
     pointer-events: none; white-space: nowrap;
-    letter-spacing: -10px;
+    letter-spacing: -12px; line-height: 1;
   }
-  .seal {
-    width: 90px; height: 90px; border-radius: 50%;
-    background: ${primary}; border: 4px solid ${secondary};
-    display: flex; align-items: center; justify-content: center;
+  .logo-wrap {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    border: 4px solid ${secondary};
+    background: ${primary};
     margin: 0 auto 24px;
-    font-size: 26px; font-weight: 900; color: ${secondary};
-    letter-spacing: -1px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; padding: 6px;
   }
+  .logo-wrap img { width: 100%; height: 100%; object-fit: contain; }
   .issued-by {
-    font-size: 11px; font-weight: 700;
-    letter-spacing: 0.25em; text-transform: uppercase;
-    color: #9A9AAA; margin-bottom: 12px;
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: #AAAAB8; margin-bottom: 14px;
   }
   .title {
-    font-size: 42px; font-weight: 900;
-    color: ${primary}; margin-bottom: 6px; line-height: 1.1;
+    font-size: 40px; font-weight: 900;
+    color: ${primary}; line-height: 1.1; margin-bottom: 6px;
   }
   .subtitle {
-    font-size: 12px; color: #9A9AAA;
-    letter-spacing: 0.1em; margin-bottom: 28px;
+    font-size: 11px; color: #AAAAB8;
+    letter-spacing: 0.1em; margin-bottom: 26px;
   }
   .divider {
-    width: 70px; height: 4px; margin: 0 auto 28px;
+    width: 64px; height: 4px;
     background: linear-gradient(90deg, ${primary}, ${secondary});
-    border-radius: 2px;
+    margin: 0 auto 26px; border-radius: 2px;
   }
-  .presents { font-size: 14px; color: #9A9AAA; margin-bottom: 10px; }
-  .name-wrapper { display: inline-block; margin-bottom: 6px; }
+  .presents { font-size: 13px; color: #9A9AAA; margin-bottom: 10px; }
   .name {
-    font-size: 44px; font-weight: 900; color: ${primary};
+    font-size: 46px; font-weight: 900;
+    color: ${primary}; line-height: 1.05;
+    display: inline-block;
     padding-bottom: 12px;
-    border-bottom: 2px solid #E8E8E0;
-    min-width: 400px; display: block;
-    line-height: 1.1;
+    border-bottom: 2px solid #EAEAEA;
+    min-width: 380px;
+    margin-bottom: 0;
   }
-  .course-pre { font-size: 14px; color: #9A9AAA; margin-top: 20px; margin-bottom: 6px; }
-  .course { font-size: 22px; font-weight: 800; color: ${primary}; margin-bottom: 32px; }
+  .course-pre { font-size: 13px; color: #9A9AAA; margin-top: 20px; margin-bottom: 6px; }
+  .course { font-size: 21px; font-weight: 800; color: ${primary}; margin-bottom: 34px; }
   .footer {
-    display: flex; justify-content: center; gap: 70px;
-    padding-top: 24px; border-top: 1px solid #F0F0F0;
+    display: flex; justify-content: center; gap: 64px;
+    padding-top: 22px; border-top: 1px solid #F0F0F0;
   }
-  .footer-item { text-align: center; }
-  .footer-val { font-size: 14px; font-weight: 700; color: ${primary}; }
-  .footer-label {
-    font-size: 10px; color: #9A9AAA;
-    text-transform: uppercase; letter-spacing: 0.1em; margin-top: 4px;
-  }
-  .score-badge {
+  .fi { text-align: center; }
+  .fv { font-size: 13px; font-weight: 700; color: ${primary}; }
+  .fl { font-size: 9px; color: #AAAAB8; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
+  .badge {
     background: ${primary}; color: ${secondary};
     padding: 4px 16px; border-radius: 100px;
-    font-weight: 900; font-size: 14px;
-    display: inline-block;
+    font-weight: 900; font-size: 13px; display: inline-block;
   }
-  .bar-bottom {
-    height: 8px;
-    background: linear-gradient(90deg, ${primary}, ${secondary});
+  .bar-bottom { height: 8px; background: linear-gradient(90deg, ${primary}, ${secondary}); }
+  .actions {
+    margin-top: 24px; text-align: center;
   }
-  .no-print { text-align: center; padding: 20px; }
-  .print-btn {
+  .btn-print {
     background: ${primary}; color: white;
-    border: none; padding: 12px 32px;
+    border: none; padding: 13px 36px;
     border-radius: 12px; font-size: 15px;
     font-weight: 700; cursor: pointer;
     font-family: inherit; margin-right: 10px;
+    letter-spacing: 0.02em;
   }
-  .print-btn:hover { opacity: 0.9; }
+  .btn-close {
+    background: transparent; border: 1.5px solid #D0D0D8;
+    padding: 13px 24px; border-radius: 12px;
+    font-size: 14px; cursor: pointer; font-family: inherit;
+    color: #6B7280;
+  }
+  .hint { margin-top: 10px; font-size: 11px; color: #AAAAB8; }
   @media print {
     body { background: white; padding: 0; }
-    .cert { box-shadow: none; width: 100%; }
-    .no-print { display: none; }
-    @page { size: landscape; margin: 0; }
+    .cert { box-shadow: none; width: 100%; border-radius: 0; }
+    .actions { display: none; }
+    @page { size: A4 landscape; margin: 0; }
   }
 </style>
 </head>
 <body>
-<div>
-  <div class="cert">
-    <div class="bar-top"></div>
-    <div class="bar-gold"></div>
-    <div class="body">
-      <div class="watermark">${initials}</div>
-      <div class="seal">${initials}</div>
-      <div class="issued-by">Grupo Montano · montano.academy</div>
-      <div class="title">Certificado de Finalización</div>
-      <div class="subtitle">Programa de Inducción Institucional · ${year}</div>
-      <div class="divider"></div>
-      <div class="presents">Este certificado acredita que</div>
-      <div class="name-wrapper">
-        <span class="name">${userName}</span>
+<div class="cert">
+  <div class="bar-top"></div>
+  <div class="bar-accent"></div>
+  <div class="body">
+    <div class="watermark">${companyName.toUpperCase()}</div>
+    <div class="logo-wrap">
+      ${logoBase64 ? `<img src="${logoBase64}" alt="${companyName}" />` : `<span style="font-size:24px;font-weight:900;color:${secondary}">${companyName.slice(0,2).toUpperCase()}</span>`}
+    </div>
+    <div class="issued-by">Grupo Montano &nbsp;·&nbsp; montano.academy</div>
+    <div class="title">Certificado de Finalización</div>
+    <div class="subtitle">Programa de Inducción Institucional &nbsp;·&nbsp; ${year}</div>
+    <div class="divider"></div>
+    <div class="presents">Este certificado acredita que</div>
+    <div class="name">${userName}</div>
+    <div class="course-pre">ha completado satisfactoriamente</div>
+    <div class="course">Inducción General &nbsp;—&nbsp; ${companyName}</div>
+    <div class="footer">
+      <div class="fi">
+        <div class="fv">${issuedDate}</div>
+        <div class="fl">Fecha de emisión</div>
       </div>
-      <div class="course-pre">ha completado satisfactoriamente</div>
-      <div class="course">Inducción General — ${companyName}</div>
-      <div class="footer">
-        <div class="footer-item">
-          <div class="footer-val">${issuedDate}</div>
-          <div class="footer-label">Fecha de emisión</div>
-        </div>
-        <div class="footer-item">
-          <div class="footer-val">${cert.certificate_number}</div>
-          <div class="footer-label">Número de certificado</div>
-        </div>
-        <div class="footer-item">
-          <div class="footer-val"><span class="score-badge">${cert.score}/100</span></div>
-          <div class="footer-label">Punteo final</div>
-        </div>
+      <div class="fi">
+        <div class="fv">${cert.certificate_number}</div>
+        <div class="fl">Número de certificado</div>
+      </div>
+      <div class="fi">
+        <div class="fv"><span class="badge">${cert.score}/100</span></div>
+        <div class="fl">Punteo final</div>
       </div>
     </div>
-    <div class="bar-bottom"></div>
   </div>
-  <div class="no-print">
-    <button class="print-btn" onclick="window.print()">Guardar como PDF</button>
-    <button onclick="window.close()" style="background:transparent;border:1px solid #ddd;padding:12px 24px;border-radius:12px;cursor:pointer;font-size:14px;">Cerrar</button>
-    <p style="margin-top:10px;font-size:12px;color:#9A9AAA;">Haz click en "Guardar como PDF" → En el diálogo elige "Guardar como PDF"</p>
-  </div>
+  <div class="bar-bottom"></div>
+</div>
+<div class="actions">
+  <button class="btn-print" onclick="window.print()">Guardar como PDF</button>
+  <button class="btn-close" onclick="window.close()">Cerrar</button>
+  <p class="hint">En el diálogo de impresión selecciona "Guardar como PDF" como destino</p>
 </div>
 </body>
 </html>`
 
   return new NextResponse(html, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-    }
+    headers: { 'Content-Type': 'text/html; charset=utf-8' }
   })
 }
