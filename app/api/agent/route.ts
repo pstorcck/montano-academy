@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   try {
     const { messages, company_slug, conversation_id, user_id } = await req.json()
 
-    // Obtener empresa y configuración del agente
+    // Obtener empresa
     const { data: company } = await supabase
       .from('companies')
       .select('id')
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
     if (!company) return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
 
+    // Obtener configuración del agente
     const { data: agentConfig } = await supabase
       .from('agent_configs')
       .select('*')
@@ -30,42 +31,36 @@ export async function POST(req: NextRequest) {
 
     if (!agentConfig) return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 })
 
-    // Obtener último mensaje del usuario
-    const lastUserMessage = messages[messages.length - 1]
-
-    // Obtener previous_response_id si existe
-    const { data: convData } = await supabase
-      .from('conversations')
-      .select('last_response_id')
-      .eq('id', conversation_id)
-      .single()
-
-    // Construir input con historial
-    const inputMessages = messages.map((m: any) => ({
-      role: m.role,
+    // Construir mensajes con historial completo
+    const chatMessages = messages.map((m: any) => ({
+      role: m.role as 'user' | 'assistant',
       content: m.content,
     }))
 
-    // Llamar a OpenAI Responses API con File Search
-    const response = await openai.responses.create({
+    // Llamar a OpenAI Chat Completions con File Search
+    const response = await openai.chat.completions.create({
       model: agentConfig.model || 'gpt-4o',
-      instructions: agentConfig.system_prompt,
-      input: inputMessages,
-      previous_response_id: convData?.last_response_id || undefined,
+      temperature: agentConfig.temperature || 0.7,
+      messages: [
+        { 
+          role: 'system', 
+          content: agentConfig.system_prompt 
+        },
+        ...chatMessages
+      ],
       tools: [
         {
           type: 'file_search',
           vector_store_ids: [agentConfig.vector_store_id],
-        }
+        } as any
       ],
-      temperature: agentConfig.temperature || 0.7,
     })
 
-    const assistantMessage = response.output_text || ''
-    const responseId = response.id
+    const assistantMessage = response.choices[0].message.content || ''
 
-    // Guardar en Supabase
+    // Guardar mensajes en Supabase
     if (conversation_id) {
+      const lastUserMessage = messages[messages.length - 1]
       await supabase.from('messages').insert([
         { conversation_id, role: 'user', content: lastUserMessage.content },
         { conversation_id, role: 'assistant', content: assistantMessage }
@@ -73,11 +68,7 @@ export async function POST(req: NextRequest) {
 
       await supabase
         .from('conversations')
-        .update({ 
-          last_response_id: responseId,
-          status: 'active',
-          updated_at: new Date().toISOString()
-        })
+        .update({ status: 'active', updated_at: new Date().toISOString() })
         .eq('id', conversation_id)
     }
 
@@ -100,7 +91,11 @@ export async function POST(req: NextRequest) {
 
       await supabase
         .from('conversations')
-        .update({ status: 'completed', score, completed_at: new Date().toISOString() })
+        .update({ 
+          status: 'completed', 
+          score, 
+          completed_at: new Date().toISOString() 
+        })
         .eq('id', conversation_id)
 
       return NextResponse.json({
