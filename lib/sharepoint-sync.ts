@@ -56,8 +56,8 @@ async function addFileToVectorStore(vectorStoreId: string, fileId: string) {
 
 async function deleteFileFromOpenAI(fileId: string, vectorStoreId: string) {
   try {
-    await openai.vectorStores.files.del(vectorStoreId, fileId)
-    await openai.files.del(fileId)
+    await openai.vectorStores.files.delete(fileId, { vector_store_id: vectorStoreId })
+    await openai.files.delete(fileId)
   } catch (e) {
     console.log(`Error eliminando archivo ${fileId}:`, e)
   }
