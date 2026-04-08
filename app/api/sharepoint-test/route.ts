@@ -19,38 +19,40 @@ async function getToken() {
     body: body.toString(),
   })
   const data = await res.json()
-  return data.access_token
+  return data
 }
 
 export async function GET() {
   try {
-    const token = await getToken()
+    const tokenData = await getToken()
+    
+    if (!tokenData.access_token) {
+      return NextResponse.json({ 
+        error: 'No token', 
+        details: tokenData,
+        env: {
+          hasTenant: !!TENANT_ID,
+          hasClient: !!CLIENT_ID,
+          hasSecret: !!CLIENT_SECRET,
+          hasSiteId: !!SITE_ID,
+          siteId: SITE_ID?.slice(0, 30) + '...'
+        }
+      })
+    }
 
-    // Ver root
+    const token = tokenData.access_token
+
     const rootRes = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root/children`,
       { headers: { Authorization: `Bearer ${token}` } }
     )
     const rootData = await rootRes.json()
-    const rootItems = rootData.value?.map((f: any) => ({ name: f.name, type: f.folder ? 'folder' : 'file' }))
 
-    // Ver dentro de Conocimiento Agente
-    const folderRes = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:/Conocimiento%20Agente:/children`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-    const folderData = await folderRes.json()
-    const folderItems = folderData.value?.map((f: any) => ({ name: f.name, type: f.folder ? 'folder' : 'file' }))
-
-    // Ver dentro de Colegio Montano
-    const cmRes = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${SITE_ID}/drive/root:/Conocimiento%20Agente/Colegio%20Montano:/children`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-    const cmData = await cmRes.json()
-    const cmItems = cmData.value?.map((f: any) => ({ name: f.name, type: f.folder ? 'folder' : 'file' }))
-
-    return NextResponse.json({ rootItems, folderItems, cmItems })
+    return NextResponse.json({ 
+      tokenOk: true,
+      rootData,
+      siteId: SITE_ID?.slice(0, 40)
+    })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
