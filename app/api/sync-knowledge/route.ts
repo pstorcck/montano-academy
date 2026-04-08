@@ -13,27 +13,29 @@ const COMPANY_FOLDERS: Record<string, string> = {
   '233536c1-e6e2-4fae-97e6-c43003db651a': 'Vitanova',
 }
 
-export async function POST() {
-  try {
-    const results = []
-    for (const [companyId, folder] of Object.entries(COMPANY_FOLDERS)) {
-      const knowledge = await getCompanyKnowledge(folder)
-      if (knowledge.length > 0) {
-        const { error } = await supabaseAdmin
-          .from('knowledge_cache')
-          .update({ content: knowledge, updated_at: new Date().toISOString() })
-          .eq('company_id', companyId)
-        results.push({ folder, success: !error, chars: knowledge.length })
-      } else {
-        results.push({ folder, success: false, chars: 0 })
-      }
+async function syncAll() {
+  const results = []
+  for (const [companyId, folder] of Object.entries(COMPANY_FOLDERS)) {
+    const knowledge = await getCompanyKnowledge(folder)
+    if (knowledge.length > 0) {
+      const { error } = await supabaseAdmin
+        .from('knowledge_cache')
+        .update({ content: knowledge, updated_at: new Date().toISOString() })
+        .eq('company_id', companyId)
+      results.push({ folder, success: !error, chars: knowledge.length })
+    } else {
+      results.push({ folder, success: false, chars: 0 })
     }
-    return NextResponse.json({ success: true, results })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+  return results
+}
+
+export async function POST() {
+  const results = await syncAll()
+  return NextResponse.json({ success: true, results })
 }
 
 export async function GET() {
-  return NextResponse.json({ message: 'Usa POST para sincronizar' })
+  const results = await syncAll()
+  return NextResponse.json({ success: true, results })
 }
