@@ -1,13 +1,6 @@
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCompanyKnowledge } from '@/lib/sharepoint'
-
-const COMPANY_FOLDERS: Record<string, string> = {
-  'colegio-montano': 'Colegio Montano',
-  'mac': 'MAC Guatemala',
-  'vitanova': 'Vitanova',
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,25 +34,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 })
     }
 
-    // Obtener conocimiento de SharePoint
-    const folder = COMPANY_FOLDERS[company_slug]
-    let sharepointKnowledge = ''
-    
-    if (folder) {
-      console.log(`Cargando conocimiento de SharePoint para: ${folder}`)
-      sharepointKnowledge = await getCompanyKnowledge(folder)
-      console.log(`Conocimiento cargado: ${sharepointKnowledge.length} chars`)
-    }
+    // Obtener conocimiento cacheado de Supabase
+    const { data: cache } = await supabase
+      .from('knowledge_cache')
+      .select('content')
+      .eq('company_id', company.id)
+      .single()
 
-    // Construir system prompt con conocimiento de SharePoint
-    const systemPrompt = sharepointKnowledge.length > 0
+    const knowledge = cache?.content || ''
+
+    // Construir system prompt
+    const systemPrompt = knowledge.length > 0
       ? `${agentConfig.system_prompt}
 
 === CONOCIMIENTO OFICIAL DE LA EMPRESA ===
-A continuación encontrarás los documentos oficiales de la empresa. 
-Usa EXCLUSIVAMENTE esta información para responder. No inventes ni supongas nada fuera de estos documentos.
+Usa EXCLUSIVAMENTE esta información para responder. No inventes nada fuera de estos documentos.
 
-${sharepointKnowledge.slice(0, 80000)}`
+${knowledge.slice(0, 80000)}`
       : agentConfig.system_prompt
 
     // Llamar a OpenAI
@@ -93,7 +84,6 @@ ${sharepointKnowledge.slice(0, 80000)}`
 
       const score = scoreMatch ? parseInt(scoreMatch[1]) : 80
       const course = courseMatch ? courseMatch[1].trim() : 'Inducción General'
-
       const year = new Date().getFullYear()
       const certNumber = `MA-${company_slug.toUpperCase().slice(0,2)}-${year}-${Math.floor(Math.random() * 900) + 100}`
 
