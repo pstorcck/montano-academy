@@ -122,8 +122,8 @@ export async function GET(req: NextRequest) {
     letter-spacing: -12px; line-height: 1;
   }
   .logo-wrap {
-    width: 140px; height: 140px;
-    margin: 0 auto 24px;
+    width: 200px; height: 120px;
+    margin: 0 auto 20px;
     display: flex; align-items: center; justify-content: center;
   }
   .logo-wrap img { width: 100%; height: 100%; object-fit: contain; }
