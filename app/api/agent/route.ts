@@ -2,88 +2,91 @@ import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 export async function POST(req: NextRequest) {
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-
     const { messages, company_slug, conversation_id, user_id } = await req.json()
 
-    // Obtener empresa
+    // Obtener empresa y configuración del agente
     const { data: company } = await supabase
       .from('companies')
       .select('id')
       .eq('slug', company_slug)
       .single()
 
-    if (!company) {
-      return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
-    }
+    if (!company) return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
 
-    // Obtener prompt del agente
     const { data: agentConfig } = await supabase
       .from('agent_configs')
       .select('*')
       .eq('company_id', company.id)
       .single()
 
-    if (!agentConfig) {
-      return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 })
-    }
+    if (!agentConfig) return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 })
 
-    // Obtener conocimiento cacheado de Supabase
-    const { data: cache } = await supabase
-      .from('knowledge_cache')
-      .select('content')
-      .eq('company_id', company.id)
+    // Obtener último mensaje del usuario
+    const lastUserMessage = messages[messages.length - 1]
+
+    // Obtener previous_response_id si existe
+    const { data: convData } = await supabase
+      .from('conversations')
+      .select('last_response_id')
+      .eq('id', conversation_id)
       .single()
 
-    const knowledge = cache?.content || ''
+    // Construir input con historial
+    const inputMessages = messages.map((m: any) => ({
+      role: m.role,
+      content: m.content,
+    }))
 
-    // Construir system prompt
-    const systemPrompt = knowledge.length > 0
-      ? `${agentConfig.system_prompt}
-
-=== CONOCIMIENTO OFICIAL DE LA EMPRESA ===
-Usa EXCLUSIVAMENTE esta información para responder. No inventes nada fuera de estos documentos.
-
-${knowledge.slice(0, 80000)}`
-      : agentConfig.system_prompt
-
-    // Llamar a OpenAI
-    const response = await openai.chat.completions.create({
+    // Llamar a OpenAI Responses API con File Search
+    const response = await openai.responses.create({
       model: agentConfig.model || 'gpt-4o',
-      temperature: agentConfig.temperature || 0.7,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages
+      instructions: agentConfig.system_prompt,
+      input: inputMessages,
+      previous_response_id: convData?.last_response_id || undefined,
+      tools: [
+        {
+          type: 'file_search',
+          vector_store_ids: [agentConfig.vector_store_id],
+        }
       ],
+      temperature: agentConfig.temperature || 0.7,
     })
 
-    const assistantMessage = response.choices[0].message.content || ''
+    const assistantMessage = response.output_text || ''
+    const responseId = response.id
 
-    // Guardar mensajes
+    // Guardar en Supabase
     if (conversation_id) {
-      const lastUserMessage = messages[messages.length - 1]
       await supabase.from('messages').insert([
         { conversation_id, role: 'user', content: lastUserMessage.content },
         { conversation_id, role: 'assistant', content: assistantMessage }
       ])
+
+      await supabase
+        .from('conversations')
+        .update({ 
+          last_response_id: responseId,
+          status: 'active',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversation_id)
     }
 
     // Detectar aprobación
     const approved = assistantMessage.includes('CERTIFICADO_APROBADO')
 
     if (approved && conversation_id) {
-      const nameMatch = assistantMessage.match(/nombre:\s*(.+)/)
-      const scoreMatch = assistantMessage.match(/punteo:\s*(\d+)/)
-      const courseMatch = assistantMessage.match(/curso:\s*(.+)/)
-
-      const score = scoreMatch ? parseInt(scoreMatch[1]) : 80
-      const course = courseMatch ? courseMatch[1].trim() : 'Inducción General'
+      const scoreMatch = assistantMessage.match(/punteo:\s*(\d+)/i)
+      const score = scoreMatch ? parseInt(scoreMatch[1]) : 85
       const year = new Date().getFullYear()
       const certNumber = `MA-${company_slug.toUpperCase().slice(0,2)}-${year}-${Math.floor(Math.random() * 900) + 100}`
 
@@ -103,7 +106,7 @@ ${knowledge.slice(0, 80000)}`
       return NextResponse.json({
         message: assistantMessage,
         approved: true,
-        certificate: { number: certNumber, score, course }
+        certificate: { number: certNumber, score }
       })
     }
 
