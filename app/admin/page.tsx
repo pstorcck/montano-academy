@@ -134,22 +134,7 @@ export default function AdminPage() {
   }
 
   const handleGenerateCert = async (userId: string, companyId: string) => {
-    const user = users.find(u => u.id === userId)
-    const company = companies.find(c => c.id === companyId)
-    if (!user || !company) return
-    const year = new Date().getFullYear()
-    const certNumber = `MA-${company.slug.toUpperCase().slice(0,2)}-${year}-${Math.floor(Math.random() * 900) + 100}`
-    const { error } = await supabase.from('certificates').insert({
-      user_id: userId, company_id: companyId,
-      certificate_number: certNumber, score: 100,
-    })
-    if (!error) {
-      setSuccessMsg(`Certificado generado para ${user.full_name}`)
-      const { data: cert } = await supabase.from('certificates')
-        .select('*, profiles(full_name, email), companies(name)')
-        .order('issued_at', { ascending: false })
-      setCertificates(cert || [])
-    }
+    window.open(`/api/certificate-pdf?user_id=${userId}&company_id=${companyId}`, '_blank')
   }
 
   const filteredUsers = filterCompany === 'all'
