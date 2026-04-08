@@ -43,7 +43,8 @@ async function downloadFile(token: string, downloadUrl: string): Promise<Buffer>
 }
 
 async function uploadToOpenAI(buffer: Buffer, filename: string): Promise<string> {
-  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer
+  const blob = new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
   const file = new File([blob], filename, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
   const uploaded = await openai.files.create({ file, purpose: 'assistants' })
   return uploaded.id
