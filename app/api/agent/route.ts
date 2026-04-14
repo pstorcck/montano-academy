@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     const { messages, company_slug, conversation_id, user_id } = body
     console.log('Request recibido:', { company_slug, conversation_id, user_id, messagesCount: messages?.length })
 
-    // Obtener empresa
     const { data: company } = await supabase
       .from('companies')
       .select('id')
@@ -24,7 +23,6 @@ export async function POST(req: NextRequest) {
 
     if (!company) return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
 
-    // Obtener configuración del agente
     const { data: agentConfig } = await supabase
       .from('agent_configs')
       .select('*')
@@ -35,9 +33,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Assistant no configurado' }, { status: 404 })
     }
 
-    // Obtener o crear thread para esta conversación
+    // Obtener o crear thread
     let threadId: string
-
     const { data: convData } = await supabase
       .from('conversations')
       .select('openai_thread_id')
@@ -50,83 +47,107 @@ export async function POST(req: NextRequest) {
       const thread = await openai.beta.threads.create()
       threadId = thread.id
       console.log('Thread creado:', threadId, 'para conversacion:', conversation_id)
-      // Intentar update directo con SQL
       const { error: threadUpdateError } = await supabase
-        .rpc('set_thread_id', { 
-          conv_id: conversation_id, 
-          thread_id: threadId 
-        })
+        .rpc('set_thread_id', { conv_id: conversation_id, thread_id: threadId })
       console.log('Thread update result:', threadUpdateError ? threadUpdateError.message : 'OK')
     }
 
-    // Agregar el último mensaje del usuario al thread
+    // Agregar mensaje del usuario
     const lastUserMessage = messages[messages.length - 1]
     await openai.beta.threads.messages.create(threadId, {
       role: 'user',
       content: lastUserMessage.content,
     })
 
-    // Ejecutar el assistant
-    const run = await openai.beta.threads.runs.createAndPoll(threadId, {
-      assistant_id: agentConfig.openai_assistant_id,
+    // Streaming
+    const encoder = new TextEncoder()
+    let fullMessage = ''
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const streamRun = openai.beta.threads.runs.stream(threadId, {
+            assistant_id: agentConfig.openai_assistant_id,
+          })
+
+          for await (const event of streamRun) {
+            if (event.event === 'thread.message.delta') {
+              const delta = event.data.delta
+              if (delta.content) {
+                for (const block of delta.content) {
+                  if (block.type === 'text' && block.text?.value) {
+                    const chunk = block.text.value
+                    fullMessage += chunk
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ chunk })}\n\n`))
+                  }
+                }
+              }
+            }
+
+            if (event.event === 'thread.run.completed') {
+              // Limpiar referencias de File Search
+              fullMessage = fullMessage.replace(/【.*?】/g, '').trim()
+
+              // Guardar en Supabase
+              if (conversation_id) {
+                await supabase.from('messages').insert([
+                  { conversation_id, role: 'user', content: lastUserMessage.content },
+                  { conversation_id, role: 'assistant', content: fullMessage }
+                ])
+                await supabase
+                  .from('conversations')
+                  .update({ status: 'active', updated_at: new Date().toISOString() })
+                  .eq('id', conversation_id)
+              }
+
+              // Detectar aprobación
+              const approved = fullMessage.includes('CERTIFICADO_APROBADO')
+              if (approved && conversation_id) {
+                const scoreMatch = fullMessage.match(/punteo:\s*(\d+)/i)
+                const score = scoreMatch ? parseInt(scoreMatch[1]) : 85
+                const year = new Date().getFullYear()
+                const certNumber = `MA-${company_slug.toUpperCase().slice(0,2)}-${year}-${Math.floor(Math.random() * 900) + 100}`
+
+                await supabase.from('certificates').insert({
+                  user_id,
+                  company_id: company.id,
+                  conversation_id,
+                  certificate_number: certNumber,
+                  score,
+                })
+
+                await supabase
+                  .from('conversations')
+                  .update({ status: 'completed', score, completed_at: new Date().toISOString() })
+                  .eq('id', conversation_id)
+
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, approved: true, certificate: { number: certNumber, score } })}\n\n`))
+              } else {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, approved: false })}\n\n`))
+              }
+
+              controller.close()
+            }
+
+            if (event.event === 'thread.run.failed') {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'Run failed' })}\n\n`))
+              controller.close()
+            }
+          }
+        } catch (err: any) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err.message })}\n\n`))
+          controller.close()
+        }
+      }
     })
 
-    if (run.status !== 'completed') {
-      return NextResponse.json({ error: `Run failed: ${run.status}` }, { status: 500 })
-    }
-
-    // Obtener la respuesta
-    const threadMessages = await openai.beta.threads.messages.list(threadId, { limit: 1 })
-    const lastMessage = threadMessages.data[0]
-    const assistantMessage = lastMessage.content
-      .filter((c: any) => c.type === 'text')
-      .map((c: any) => c.text.value)
-      .join('\n')
-      .replace(/【.*?】/g, '') // Eliminar referencias de File Search
-      .trim()
-
-    // Guardar en Supabase
-    if (conversation_id) {
-      await supabase.from('messages').insert([
-        { conversation_id, role: 'user', content: lastUserMessage.content },
-        { conversation_id, role: 'assistant', content: assistantMessage }
-      ])
-      await supabase
-        .from('conversations')
-        .update({ status: 'active', updated_at: new Date().toISOString() })
-        .eq('id', conversation_id)
-    }
-
-    // Detectar aprobación
-    const approved = assistantMessage.includes('CERTIFICADO_APROBADO')
-
-    if (approved && conversation_id) {
-      const scoreMatch = assistantMessage.match(/punteo:\s*(\d+)/i)
-      const score = scoreMatch ? parseInt(scoreMatch[1]) : 85
-      const year = new Date().getFullYear()
-      const certNumber = `MA-${company_slug.toUpperCase().slice(0,2)}-${year}-${Math.floor(Math.random() * 900) + 100}`
-
-      await supabase.from('certificates').insert({
-        user_id,
-        company_id: company.id,
-        conversation_id,
-        certificate_number: certNumber,
-        score,
-      })
-
-      await supabase
-        .from('conversations')
-        .update({ status: 'completed', score, completed_at: new Date().toISOString() })
-        .eq('id', conversation_id)
-
-      return NextResponse.json({
-        message: assistantMessage,
-        approved: true,
-        certificate: { number: certNumber, score }
-      })
-    }
-
-    return NextResponse.json({ message: assistantMessage, approved: false })
+    return new NextResponse(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      }
+    })
 
   } catch (error: any) {
     console.error('Error agente:', error)

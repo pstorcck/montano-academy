@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 type Message = {
   role: 'user' | 'assistant'
   content: string
+  streaming?: boolean
 }
 
 export default function InduccionPage() {
@@ -39,7 +40,6 @@ export default function InduccionPage() {
       setProfile(profileData)
       setCompany(profileData.companies)
 
-      // Buscar conversación existente activa
       const { data: existingConv } = await supabase
         .from('conversations')
         .select('*')
@@ -49,7 +49,6 @@ export default function InduccionPage() {
         .limit(1)
         .single()
 
-      // Verificar si ya tiene certificado
       const { data: cert } = await supabase
         .from('certificates')
         .select('*')
@@ -57,16 +56,10 @@ export default function InduccionPage() {
         .eq('company_id', profileData.company_id)
         .single()
 
-      if (cert) {
-        setCertificate(cert)
-        setApproved(true)
-      }
+      if (cert) { setCertificate(cert); setApproved(true) }
 
       if (existingConv && existingConv.status !== 'completed') {
-        // Continuar conversación existente
         setConversationId(existingConv.id)
-
-        // Cargar mensajes anteriores
         const { data: prevMessages } = await supabase
           .from('messages')
           .select('*')
@@ -74,43 +67,28 @@ export default function InduccionPage() {
           .order('created_at', { ascending: true })
 
         if (prevMessages && prevMessages.length > 0) {
-          setMessages(prevMessages.map(m => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content
-          })))
+          setMessages(prevMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })))
           setInitializing(false)
         } else {
-          // Conversación existe pero sin mensajes — enviar saludo inicial
           await sendInitialMessage(profileData.companies.slug, existingConv.id, user.id)
           setInitializing(false)
         }
       } else if (existingConv && existingConv.status === 'completed') {
-        // Curso completado — cargar mensajes solo para ver
         setConversationId(existingConv.id)
         const { data: prevMessages } = await supabase
           .from('messages')
           .select('*')
           .eq('conversation_id', existingConv.id)
           .order('created_at', { ascending: true })
-
         if (prevMessages) {
-          setMessages(prevMessages.map(m => ({
-            role: m.role as 'user' | 'assistant',
-            content: m.content
-          })))
+          setMessages(prevMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })))
         }
         setInitializing(false)
       } else {
-        // Primera vez — crear conversación nueva
         const { data: newConv } = await supabase
           .from('conversations')
-          .insert({
-            user_id: user.id,
-            company_id: profileData.company_id,
-            status: 'active'
-          })
-          .select()
-          .single()
+          .insert({ user_id: user.id, company_id: profileData.company_id, status: 'active' })
+          .select().single()
 
         if (newConv) {
           setConversationId(newConv.id)
@@ -128,78 +106,121 @@ export default function InduccionPage() {
 
   const sendInitialMessage = async (slug: string, convId: string, userId: string) => {
     setLoading(true)
-    const res = await fetch('/api/agent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: 'Hola, estoy listo para comenzar mi inducción.' }],
-        company_slug: slug,
-        conversation_id: convId,
-        user_id: userId,
-      })
-    })
-    const data = await res.json()
-    if (data.message) {
+    await sendStreamMessage(
+      [{ role: 'user', content: 'Hola, estoy listo para comenzar mi inducción.' }],
+      slug, convId, userId, true
+    )
+    setLoading(false)
+  }
+
+  const sendStreamMessage = async (
+    msgs: Message[], slug: string, convId: string, userId: string, isInitial = false
+  ) => {
+    if (!isInitial) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true }])
+    } else {
       setMessages([
         { role: 'user', content: 'Hola, estoy listo para comenzar mi inducción.' },
-        { role: 'assistant', content: data.message }
+        { role: 'assistant', content: '', streaming: true }
       ])
     }
-    setLoading(false)
+
+    try {
+      const res = await fetch('/api/agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: msgs,
+          company_slug: slug,
+          conversation_id: convId,
+          user_id: userId,
+        })
+      })
+
+      if (!res.body) return
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+
+              if (data.chunk) {
+                setMessages(prev => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last.role === 'assistant') {
+                    updated[updated.length - 1] = { ...last, content: last.content + data.chunk }
+                  }
+                  return updated
+                })
+              }
+
+              if (data.done) {
+                setMessages(prev => {
+                  const updated = [...prev]
+                  const last = updated[updated.length - 1]
+                  if (last.role === 'assistant') {
+                    updated[updated.length - 1] = { ...last, streaming: false }
+                  }
+                  return updated
+                })
+
+                if (data.approved) {
+                  setApproved(true)
+                  const { data: cert } = await supabase
+                    .from('certificates')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .single()
+                  setCertificate(cert)
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Stream error:', err)
+      setMessages(prev => {
+        const updated = [...prev]
+        const last = updated[updated.length - 1]
+        if (last.streaming) {
+          updated[updated.length - 1] = { ...last, content: 'Error al conectar. Intenta de nuevo.', streaming: false }
+        }
+        return updated
+      })
+    }
   }
 
   const sendMessage = async () => {
     if (!input.trim() || loading || approved) return
-
     const userMessage = input.trim()
     setInput('')
     const newMessages: Message[] = [...messages, { role: 'user', content: userMessage }]
     setMessages(newMessages)
     setLoading(true)
-
-    const res = await fetch('/api/agent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: newMessages,
-        company_slug: company?.slug,
-        conversation_id: conversationId,
-        user_id: profile?.id,
-      })
-    })
-
-    const data = await res.json()
-
-    if (data.message) {
-      setMessages([...newMessages, { role: 'assistant', content: data.message }])
-    }
-
-    if (data.approved && data.certificate) {
-      setApproved(true)
-      // Buscar el certificado en DB
-      const { data: cert } = await supabase
-        .from('certificates')
-        .select('*')
-        .eq('user_id', profile?.id)
-        .eq('company_id', company?.id)
-        .single()
-      setCertificate(cert)
-    }
-
+    await sendStreamMessage(newMessages, company?.slug, conversationId!, profile?.id)
     setLoading(false)
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
   const handleDownloadCert = () => {
-    if (certificate) {
-      window.open(`/api/certificate-pdf?id=${certificate.id}`, '_blank')
-    }
+    if (certificate) window.open(`/api/certificate-pdf?id=${certificate.id}`, '_blank')
   }
 
   if (initializing) return (
@@ -215,15 +236,11 @@ export default function InduccionPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#F8F7F4' }}>
-
-      {/* Topbar */}
       <div className="bg-white border-b px-6 h-14 flex items-center justify-between sticky top-0 z-10"
         style={{ borderColor: '#E8E8E0' }}>
         <div className="flex items-center gap-3">
           <button onClick={() => router.push('/dashboard')}
-            className="text-sm cursor-pointer" style={{ color: '#9A9AAA' }}>
-            ← Dashboard
-          </button>
+            className="text-sm cursor-pointer" style={{ color: '#9A9AAA' }}>← Dashboard</button>
           <div className="w-px h-4" style={{ background: '#E8E8E0' }}></div>
           <div className="w-7 h-7 rounded-lg overflow-hidden bg-white border flex items-center justify-center"
             style={{ borderColor: '#E8E8E0' }}>
@@ -231,20 +248,14 @@ export default function InduccionPage() {
               style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div>
-            <span className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>
-              Inducción General
-            </span>
-            <span className="text-xs ml-2" style={{ color: '#9A9AAA' }}>
-              con {branding.agentName}
-            </span>
+            <span className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>Inducción General</span>
+            <span className="text-xs ml-2" style={{ color: '#9A9AAA' }}>con {branding.agentName}</span>
           </div>
         </div>
         <div className="flex items-center gap-3">
           {approved && (
             <span className="text-xs font-semibold px-3 py-1 rounded-full"
-              style={{ background: '#DCFCE7', color: '#166534' }}>
-              Completado
-            </span>
+              style={{ background: '#DCFCE7', color: '#166534' }}>Completado</span>
           )}
           <span className="text-xs px-3 py-1 rounded-full font-semibold"
             style={{ background: '#F3F4F6', color: '#6B7280' }}>
@@ -253,7 +264,6 @@ export default function InduccionPage() {
         </div>
       </div>
 
-      {/* Chat */}
       <div className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl mx-auto w-full">
         {messages.map((msg, i) => (
           <div key={i} className={`flex mb-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -264,7 +274,7 @@ export default function InduccionPage() {
                   style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2 }} />
               </div>
             )}
-            <div className={`max-w-lg px-4 py-3 rounded-2xl text-sm leading-relaxed`}
+            <div className="max-w-lg px-4 py-3 rounded-2xl text-sm leading-relaxed"
               style={{
                 background: msg.role === 'user' ? branding.primaryColor : 'white',
                 color: msg.role === 'user' ? 'white' : '#1A1A2E',
@@ -272,29 +282,14 @@ export default function InduccionPage() {
                 borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
               }}>
               <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+              {msg.streaming && (
+                <span className="inline-block w-2 h-4 ml-1 animate-pulse"
+                  style={{ background: branding.primaryColor, borderRadius: 2 }}></span>
+              )}
             </div>
           </div>
         ))}
 
-        {loading && (
-          <div className="flex mb-4 justify-start">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center mr-3 flex-shrink-0 overflow-hidden"
-              style={{ background: branding.bgColor }}>
-              <img src={branding.logoUrl} alt="agente"
-                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2 }} />
-            </div>
-            <div className="px-4 py-3 rounded-2xl bg-white border" style={{ borderColor: '#E8E8E0' }}>
-              <div className="flex gap-1">
-                {[0,1,2].map(i => (
-                  <div key={i} className="w-2 h-2 rounded-full animate-bounce"
-                    style={{ background: '#D1D5DB', animationDelay: `${i * 0.15}s` }}></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Banner certificado */}
         {approved && certificate && (
           <div className="rounded-2xl p-6 text-center mb-4"
             style={{ background: `linear-gradient(135deg, ${branding.bgColor}, ${branding.primaryColor})` }}>
@@ -321,23 +316,18 @@ export default function InduccionPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       {!approved && (
         <div className="bg-white border-t px-4 py-4" style={{ borderColor: '#E8E8E0' }}>
           <div className="max-w-3xl mx-auto flex gap-3">
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
+            <textarea value={input} onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Escribe tu respuesta..."
-              rows={1}
+              placeholder="Escribe tu respuesta..." rows={1}
               className="flex-1 border rounded-xl px-4 py-3 text-sm outline-none resize-none"
-              style={{ borderColor: '#E8E8E0', color: '#1A1A2E' }}
-            />
+              style={{ borderColor: '#E8E8E0', color: '#1A1A2E' }} />
             <button onClick={sendMessage} disabled={loading || !input.trim()}
               className="px-5 py-3 rounded-xl text-sm font-bold text-white transition-all"
               style={{ background: loading || !input.trim() ? '#D1D5DB' : branding.primaryColor }}>
-              Enviar
+              {loading ? '...' : 'Enviar'}
             </button>
           </div>
           <p className="text-center text-xs mt-2" style={{ color: '#9A9AAA' }}>
