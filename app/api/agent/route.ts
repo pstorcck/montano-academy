@@ -35,11 +35,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Assistant no configurado' }, { status: 404 })
     }
 
-    // Actualizar instrucciones del assistant con el prompt de Supabase
-    await openai.beta.assistants.update(agentConfig.openai_assistant_id, {
-      instructions: agentConfig.system_prompt,
-    })
-
     // Obtener o crear thread para esta conversación
     let threadId: string
 
