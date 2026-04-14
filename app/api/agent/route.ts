@@ -55,11 +55,13 @@ export async function POST(req: NextRequest) {
       const thread = await openai.beta.threads.create()
       threadId = thread.id
       console.log('Thread creado:', threadId, 'para conversacion:', conversation_id)
+      // Intentar update directo con SQL
       const { error: threadUpdateError } = await supabase
-        .from('conversations')
-        .update({ openai_thread_id: threadId })
-        .eq('id', conversation_id)
-      console.log('Thread update error:', threadUpdateError)
+        .rpc('set_thread_id', { 
+          conv_id: conversation_id, 
+          thread_id: threadId 
+        })
+      console.log('Thread update result:', threadUpdateError ? threadUpdateError.message : 'OK')
     }
 
     // Agregar el último mensaje del usuario al thread
