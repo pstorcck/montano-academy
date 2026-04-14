@@ -11,7 +11,9 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, company_slug, conversation_id, user_id } = await req.json()
+    const body = await req.json()
+    const { messages, company_slug, conversation_id, user_id } = body
+    console.log('Request recibido:', { company_slug, conversation_id, user_id, messagesCount: messages?.length })
 
     // Obtener empresa
     const { data: company } = await supabase
