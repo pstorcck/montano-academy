@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   try {
     const { messages, company_slug, conversation_id, user_id } = await req.json()
 
+    // Obtener empresa
     const { data: company } = await supabase
       .from('companies')
       .select('id')
@@ -21,51 +22,70 @@ export async function POST(req: NextRequest) {
 
     if (!company) return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
 
+    // Obtener configuración del agente
     const { data: agentConfig } = await supabase
       .from('agent_configs')
       .select('*')
       .eq('company_id', company.id)
       .single()
 
-    if (!agentConfig) return NextResponse.json({ error: 'Agente no encontrado' }, { status: 404 })
+    if (!agentConfig?.openai_assistant_id) {
+      return NextResponse.json({ error: 'Assistant no configurado' }, { status: 404 })
+    }
 
-    // Cargar conocimiento desde Supabase cache
-    const { data: cache } = await supabase
-      .from('knowledge_cache')
-      .select('content')
-      .eq('company_id', company.id)
-      .single()
-
-    const knowledge = cache?.content || ''
-
-    // System prompt con conocimiento
-    const systemPrompt = knowledge.length > 0
-      ? `${agentConfig.system_prompt}
-
-=== DOCUMENTOS OFICIALES INSTITUCIONALES ===
-A continuación están los documentos oficiales. Úsalos para responder. Nunca los llames "documentos subidos por el usuario" — son documentos oficiales del agente.
-
-${knowledge.slice(0, 80000)}`
-      : agentConfig.system_prompt
-
-    const chatMessages = messages.map((m: any) => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }))
-
-    const response = await openai.chat.completions.create({
-      model: agentConfig.model || 'gpt-4o',
-      temperature: agentConfig.temperature || 0.7,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...chatMessages
-      ],
+    // Actualizar instrucciones del assistant con el prompt de Supabase
+    await openai.beta.assistants.update(agentConfig.openai_assistant_id, {
+      instructions: agentConfig.system_prompt,
     })
 
-    const assistantMessage = response.choices[0].message.content || ''
+    // Obtener o crear thread para esta conversación
+    let threadId: string
 
+    const { data: convData } = await supabase
+      .from('conversations')
+      .select('openai_thread_id')
+      .eq('id', conversation_id)
+      .single()
+
+    if (convData?.openai_thread_id) {
+      threadId = convData.openai_thread_id
+    } else {
+      const thread = await openai.beta.threads.create()
+      threadId = thread.id
+      await supabase
+        .from('conversations')
+        .update({ openai_thread_id: threadId })
+        .eq('id', conversation_id)
+    }
+
+    // Agregar el último mensaje del usuario al thread
+    const lastUserMessage = messages[messages.length - 1]
+    await openai.beta.threads.messages.create(threadId, {
+      role: 'user',
+      content: lastUserMessage.content,
+    })
+
+    // Ejecutar el assistant
+    const run = await openai.beta.threads.runs.createAndPoll(threadId, {
+      assistant_id: agentConfig.openai_assistant_id,
+    })
+
+    if (run.status !== 'completed') {
+      return NextResponse.json({ error: `Run failed: ${run.status}` }, { status: 500 })
+    }
+
+    // Obtener la respuesta
+    const threadMessages = await openai.beta.threads.messages.list(threadId, { limit: 1 })
+    const lastMessage = threadMessages.data[0]
+    const assistantMessage = lastMessage.content
+      .filter((c: any) => c.type === 'text')
+      .map((c: any) => c.text.value)
+      .join('\n')
+      .replace(/【.*?】/g, '') // Eliminar referencias de File Search
+      .trim()
+
+    // Guardar en Supabase
     if (conversation_id) {
-      const lastUserMessage = messages[messages.length - 1]
       await supabase.from('messages').insert([
         { conversation_id, role: 'user', content: lastUserMessage.content },
         { conversation_id, role: 'assistant', content: assistantMessage }
@@ -76,6 +96,7 @@ ${knowledge.slice(0, 80000)}`
         .eq('id', conversation_id)
     }
 
+    // Detectar aprobación
     const approved = assistantMessage.includes('CERTIFICADO_APROBADO')
 
     if (approved && conversation_id) {
