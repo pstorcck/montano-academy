@@ -27,6 +27,8 @@ export default function AdminPage() {
   const [bulkCompanyId, setBulkCompanyId] = useState('')
   const [bulkResults, setBulkResults] = useState<any[]>([])
   const [xlsData, setXlsData] = useState<any[]>([])
+  const [deletingUser, setDeletingUser] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<any>(null)
 
   const [newUser, setNewUser] = useState({
     full_name: '', email: '', password: '',
@@ -155,6 +157,29 @@ export default function AdminPage() {
     const { data: usr } = await supabase.from('profiles').select('*, companies(name, slug, primary_color)').order('full_name')
     setUsers(usr || [])
     setSuccessMsg(`${results.filter(r => r.success).length} invitaciones enviadas de ${results.length}`)
+  }
+
+  const handleDeleteUser = async (user: any) => {
+    setDeletingUser(user.id)
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id })
+      })
+      const data = await res.json()
+      if (data.error) {
+        setErrorMsg(data.error)
+      } else {
+        setSuccessMsg(`Usuario ${user.full_name} eliminado`)
+        const { data: usr } = await supabase.from('profiles').select('*, companies(name, slug, primary_color)').order('full_name')
+        setUsers(usr || [])
+      }
+    } catch (e) {
+      setErrorMsg('Error al eliminar usuario')
+    }
+    setDeletingUser(null)
+    setConfirmDelete(null)
   }
 
   const handleGenerateCert = async (userId: string, companyId: string) => {
@@ -354,11 +379,18 @@ export default function AdminPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4">
+                          <div className="flex gap-2">
                           <button onClick={() => handleGenerateCert(user.id, user.company_id)}
                             className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all hover:bg-gray-50"
                             style={{ borderColor: '#E8E8E0', color: '#374151' }}>
-                            Generar certificado
+                            Certificado
                           </button>
+                          <button onClick={() => setConfirmDelete(user)}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all hover:bg-red-50"
+                            style={{ borderColor: '#FECACA', color: '#DC2626' }}>
+                            Eliminar
+                          </button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -475,6 +507,36 @@ export default function AdminPage() {
                   {creating ? 'Enviando...' : 'Enviar invitación'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR ELIMINACIÓN */}
+      {confirmDelete && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.4)' }}>
+          <div className="bg-white rounded-2xl p-8 w-full max-w-sm shadow-2xl">
+            <h3 className="text-base font-bold mb-2" style={{ color: '#1A1A2E' }}>Eliminar usuario</h3>
+            <p className="text-sm mb-1" style={{ color: '#6B7280' }}>
+              ¿Estás seguro que deseas eliminar a:
+            </p>
+            <p className="text-sm font-bold mb-1" style={{ color: '#1A1A2E' }}>{confirmDelete.full_name}</p>
+            <p className="text-xs mb-6" style={{ color: '#9A9AAA' }}>{confirmDelete.email}</p>
+            <div className="rounded-lg px-4 py-3 text-sm mb-6" style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}>
+              Esta acción no se puede deshacer. Se eliminará el usuario y todo su historial.
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold border"
+                style={{ borderColor: '#E8E8E0', color: '#374151' }}>
+                Cancelar
+              </button>
+              <button onClick={() => handleDeleteUser(confirmDelete)}
+                disabled={deletingUser === confirmDelete.id}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white"
+                style={{ background: '#DC2626' }}>
+                {deletingUser === confirmDelete.id ? 'Eliminando...' : 'Eliminar'}
+              </button>
             </div>
           </div>
         </div>
