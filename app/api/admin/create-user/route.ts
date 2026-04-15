@@ -32,10 +32,10 @@ export async function POST(req: NextRequest) {
 
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert({
+      .upsert({
         id: authData.user!.id,
         full_name, email, company_id, role, is_active: true,
-      })
+      }, { onConflict: 'id' })
 
     if (profileError) {
       return NextResponse.json({ error: profileError.message }, { status: 400 })
