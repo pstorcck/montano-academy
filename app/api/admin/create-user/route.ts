@@ -26,14 +26,14 @@ export async function POST(req: NextRequest) {
       authError = result.error
     }
 
-    if (authError) {
-      return NextResponse.json({ error: authError.message }, { status: 400 })
+    if (authError || !authData?.user) {
+      return NextResponse.json({ error: authError?.message || 'Error creando usuario' }, { status: 400 })
     }
 
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert({
-        id: authData.user.id,
+        id: authData.user!.id,
         full_name, email, company_id, role, is_active: true,
       })
 
