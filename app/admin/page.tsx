@@ -28,6 +28,7 @@ export default function AdminPage() {
   const [bulkResults, setBulkResults] = useState<any[]>([])
   const [xlsData, setXlsData] = useState<any[]>([])
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
+  const [syncingPrompts, setSyncingPrompts] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<any>(null)
 
   const [newUser, setNewUser] = useState({
@@ -215,6 +216,20 @@ export default function AdminPage() {
           </span>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              setSyncingPrompts(true)
+              const res = await fetch('/api/admin/sync-prompts', { method: 'POST' })
+              const data = await res.json()
+              if (data.success) setSuccessMsg(`Prompts sincronizados: ${data.results.map((r: any) => r.company).join(', ')}`)
+              else setErrorMsg(data.error)
+              setSyncingPrompts(false)
+            }}
+            disabled={syncingPrompts}
+            className="px-4 py-2 rounded-lg text-sm font-semibold border transition-all hover:bg-gray-50"
+            style={{ borderColor: '#E8E8E0', color: '#1A1A2E', background: 'white' }}>
+            {syncingPrompts ? 'Sincronizando...' : 'Sync prompts'}
+          </button>
           <button onClick={() => { setShowBulkUpload(true); setErrorMsg(''); setBulkResults([]) }}
             className="px-4 py-2 rounded-lg text-sm font-semibold border transition-all hover:bg-gray-50"
             style={{ borderColor: '#E8E8E0', color: '#1A1A2E', background: 'white' }}>
