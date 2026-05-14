@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [bulkCompanyId, setBulkCompanyId] = useState('')
   const [bulkResults, setBulkResults] = useState<any[]>([])
   const [xlsData, setXlsData] = useState<any[]>([])
+  const [createdUsers, setCreatedUsers] = useState<any[]>([])
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
   const [syncingPrompts, setSyncingPrompts] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<any>(null)
@@ -87,14 +88,21 @@ export default function AdminPage() {
       setErrorMsg('Nombre, email y empresa son requeridos'); return
     }
     setCreating(true); setErrorMsg(''); setSuccessMsg('')
+    const company = companies.find(c => c.id === newUser.company_id)
     const res = await fetch('/api/admin/create-user', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...newUser, send_invite: true })
+      body: JSON.stringify({ ...newUser, company_name: company?.name, send_invite: false })
     })
     const data = await res.json()
     if (data.error) { setErrorMsg(data.error) }
     else {
-      setSuccessMsg(`Invitación enviada a ${newUser.email}`)
+      setCreatedUsers(prev => [...prev, { 
+        full_name: newUser.full_name, 
+        email: newUser.email, 
+        password: data.tempPassword,
+        company: company?.name
+      }])
+      setSuccessMsg(`Usuario creado y email enviado a ${newUser.email}`)
       setNewUser({ full_name: '', email: '', password: '', role: 'collaborator', company_id: '' })
       setShowCreateUser(false)
       const { data: usr } = await supabase.from('profiles').select('*, companies(name, slug, primary_color)').order('full_name')
@@ -183,6 +191,22 @@ export default function AdminPage() {
     setConfirmDelete(null)
   }
 
+  const exportUsersXLS = () => {
+    if (createdUsers.length === 0) {
+      setErrorMsg('No hay usuarios creados en esta sesión para exportar')
+      return
+    }
+    const ws = XLSX.utils.json_to_sheet(createdUsers.map(u => ({
+      'Nombre': u.full_name,
+      'Email': u.email,
+      'Contraseña temporal': u.password,
+      'Empresa': u.company
+    })))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Usuarios')
+    XLSX.writeFile(wb, `usuarios-montano-${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
+
   const handleGenerateCert = async (userId: string, companyId: string) => {
     window.open(`/api/certificate-pdf?user_id=${userId}&company_id=${companyId}`, '_blank')
   }
@@ -216,6 +240,13 @@ export default function AdminPage() {
           </span>
         </div>
         <div className="flex gap-2">
+          {createdUsers.length > 0 && (
+            <button onClick={exportUsersXLS}
+              className="px-4 py-2 rounded-lg text-sm font-semibold border transition-all hover:bg-green-50"
+              style={{ borderColor: '#BBF7D0', color: '#166534', background: 'white' }}>
+              Exportar {createdUsers.length} usuarios
+            </button>
+          )}
           <button
             onClick={async () => {
               setSyncingPrompts(true)
