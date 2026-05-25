@@ -26,6 +26,11 @@ const COMPANY_CONFIG = [
     folder: 'Conocimiento Agente/Vitanova',
     vectorStoreId: 'vs_69d6d0eaf67881918e8a948c07821a65',
   },
+  {
+    companyId: '47ec7280-d4c1-4332-aceb-4045259f9651',
+    folder: 'Conocimiento Agente/Escolaris',
+    vectorStoreId: 'vs_6a1494dac0d88191bef084270df97cb3',
+  },
 ]
 
 async function getFilesInFolder(token: string, folderPath: string) {
