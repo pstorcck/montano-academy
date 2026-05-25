@@ -51,9 +51,9 @@ export const COMPANY_BRANDING: Record<string, CompanyBranding> = {
   'escolaris': {
     name: 'Escolaris',
     slug: 'escolaris',
-    primaryColor: '#1B3A6B',
-    secondaryColor: '#00A86B',
-    bgColor: '#1B3A6B',
+    primaryColor: '#244B5A',
+    secondaryColor: '#F7BE00',
+    bgColor: '#244B5A',
     textOnPrimary: '#FFFFFF',
     agentName: 'Escy',
     tagline: 'Educación online · Guatemala',

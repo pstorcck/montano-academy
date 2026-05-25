@@ -12,6 +12,7 @@ const LOGO_MAP: Record<string, string> = {
   'colegio-montano': 'logo-cm.jpg',
   'mac': 'logo-mac.jpg',
   'vitanova': 'logo-vitanova.jpg',
+  'escolaris': 'logo-escolaris.png',
 }
 
 function getLogoBase64(slug: string): string {
@@ -19,7 +20,8 @@ function getLogoBase64(slug: string): string {
     const filename = LOGO_MAP[slug] || 'logo-cm.jpg'
     const filepath = join(process.cwd(), 'public', filename)
     const buffer = readFileSync(filepath)
-    return `data:image/jpeg;base64,${buffer.toString('base64')}`
+    const mime = filename.endsWith('.png') ? 'image/png' : 'image/jpeg'
+    return `data:${mime};base64,${buffer.toString('base64')}`
   } catch {
     return ''
   }
