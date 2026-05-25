@@ -205,7 +205,7 @@ export default function InduccionPage() {
   }
 
   const sendMessage = async () => {
-    if (!input.trim() || loading || approved) return
+    if (!input.trim() || loading) return
     const userMessage = input.trim()
     setInput('')
     const newMessages: Message[] = [...messages, { role: 'user', content: userMessage }]
@@ -316,7 +316,7 @@ export default function InduccionPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {!approved && (
+      {(
         <div className="bg-white border-t px-4 py-4" style={{ borderColor: '#E8E8E0' }}>
           <div className="max-w-3xl mx-auto flex gap-3">
             <textarea value={input} onChange={e => setInput(e.target.value)}
@@ -332,14 +332,6 @@ export default function InduccionPage() {
           </div>
           <p className="text-center text-xs mt-2" style={{ color: '#9A9AAA' }}>
             Enter para enviar · Tu progreso se guarda automáticamente
-          </p>
-        </div>
-      )}
-
-      {approved && (
-        <div className="bg-white border-t px-4 py-4 text-center" style={{ borderColor: '#E8E8E0' }}>
-          <p className="text-sm font-semibold" style={{ color: '#166534' }}>
-            Inducción completada — Tu certificado ha sido emitido
           </p>
         </div>
       )}
