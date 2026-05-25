@@ -48,6 +48,18 @@ export const COMPANY_BRANDING: Record<string, CompanyBranding> = {
     logoInitials: 'VN',
     logoUrl: '/logo-vitanova.jpg',
   },
+  'escolaris': {
+    name: 'Escolaris',
+    slug: 'escolaris',
+    primaryColor: '#1B3A6B',
+    secondaryColor: '#00A86B',
+    bgColor: '#1B3A6B',
+    textOnPrimary: '#FFFFFF',
+    agentName: 'Escy',
+    tagline: 'Educación online · Guatemala',
+    logoInitials: 'ES',
+    logoUrl: '/logo-escolaris.png',
+  },
 }
 
 export function getBranding(slug: string): CompanyBranding {
