@@ -242,7 +242,7 @@ export default function InduccionPage() {
           <button onClick={() => router.push('/dashboard')}
             className="text-sm cursor-pointer" style={{ color: '#9A9AAA' }}>← Dashboard</button>
           <div className="w-px h-4" style={{ background: '#E8E8E0' }}></div>
-          <div className="w-7 h-7 rounded-lg overflow-hidden bg-white border flex items-center justify-center"
+          <div className="w-20 h-10 rounded-lg overflow-hidden bg-white border flex items-center justify-center px-1"
             style={{ borderColor: '#E8E8E0' }}>
             <img src={branding.logoUrl} alt={branding.name}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
@@ -268,10 +268,10 @@ export default function InduccionPage() {
         {messages.map((msg, i) => (
           <div key={i} className={`flex mb-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white mr-3 flex-shrink-0 mt-1 overflow-hidden"
-                style={{ background: branding.bgColor }}>
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center mr-3 flex-shrink-0 mt-1 overflow-hidden bg-white border"
+                style={{ borderColor: '#E8E8E0' }}>
                 <img src={branding.logoUrl} alt="agente"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 2 }} />
+                  style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
               </div>
             )}
             <div className="max-w-lg px-4 py-3 rounded-2xl text-sm leading-relaxed"
