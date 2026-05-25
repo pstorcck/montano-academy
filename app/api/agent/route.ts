@@ -33,6 +33,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Assistant no configurado' }, { status: 404 })
     }
 
+    // Obtener módulos completados
+    const { data: completedModules } = await supabase
+      .from('module_progress')
+      .select('module_name, score')
+      .eq('user_id', user_id)
+      .eq('company_id', company.id)
+
+    const completedModuleNames = (completedModules || []).map(m => m.module_name)
+
     // Obtener o crear thread
     let threadId: string
     const { data: convData } = await supabase
@@ -46,7 +55,6 @@ export async function POST(req: NextRequest) {
     } else {
       const thread = await openai.beta.threads.create()
       threadId = thread.id
-      console.log('Thread creado:', threadId, 'para conversacion:', conversation_id)
       const { error: threadUpdateError } = await supabase
         .rpc('set_thread_id', { conv_id: conversation_id, thread_id: threadId })
       console.log('Thread update result:', threadUpdateError ? threadUpdateError.message : 'OK')
@@ -85,10 +93,9 @@ export async function POST(req: NextRequest) {
             }
 
             if (event.event === 'thread.run.completed') {
-              // Limpiar referencias de File Search
               fullMessage = fullMessage.replace(/【.*?】/g, '').trim()
 
-              // Guardar en Supabase
+              // Guardar mensajes
               if (conversation_id) {
                 await supabase.from('messages').insert([
                   { conversation_id, role: 'user', content: lastUserMessage.content },
@@ -100,28 +107,110 @@ export async function POST(req: NextRequest) {
                   .eq('id', conversation_id)
               }
 
-              // Detectar aprobación
-              const approved = fullMessage.includes('CERTIFICADO_APROBADO')
-              if (approved && conversation_id) {
+              // Detectar módulo aprobado
+              const moduleMatch = fullMessage.match(/MODULO_APROBADO[\s\S]*?modulo:\s*(.+?)[\n\r]/i)
+              const modulePunteoMatch = fullMessage.match(/MODULO_APROBADO[\s\S]*?punteo:\s*(\d+)/i)
+
+              if (moduleMatch && conversation_id) {
+                const moduleName = moduleMatch[1].trim()
+                const moduleScore = modulePunteoMatch ? parseInt(modulePunteoMatch[1]) : 85
+
+                // Guardar módulo completado
+                await supabase.from('module_progress').upsert({
+                  user_id,
+                  company_id: company.id,
+                  module_name: moduleName,
+                  score: moduleScore,
+                  conversation_id,
+                }, { onConflict: 'user_id,company_id,module_name' })
+
+                // Verificar si completó todos los módulos
+                const requiredModules: string[] = agentConfig.required_modules || []
+                const newCompleted = [...completedModuleNames, moduleName]
+
+                // Para MAC verificar módulo de unidad de negocio dinámicamente
+                let allComplete = false
+                if (company_slug === 'mac') {
+                  const hasGeneral = newCompleted.some(m => m.includes('Conocimiento General'))
+                  const hasUnit = newCompleted.some(m => 
+                    m.includes('Montano Café') || m.includes('PPT') || 
+                    m.includes('MAC OS') || m.includes('Inmobiliaria') ||
+                    m.includes('Piedra Papel') || m.includes('Tecnoparque')
+                  )
+                  allComplete = hasGeneral && hasUnit
+                } else {
+                  allComplete = requiredModules.length > 0 && 
+                    requiredModules.every(m => newCompleted.some(c => 
+                      c.toLowerCase().includes(m.toLowerCase()) || 
+                      m.toLowerCase().includes(c.toLowerCase())
+                    ))
+                }
+
+                if (allComplete) {
+                  // Emitir certificado general
+                  const avgScore = Math.round(
+                    [...(completedModules || []), { score: moduleScore }]
+                      .reduce((sum, m) => sum + m.score, 0) / 
+                    (completedModuleNames.length + 1)
+                  )
+
+                  const year = new Date().getFullYear()
+                  const certNumber = `MA-${company_slug.toUpperCase().slice(0,2)}-${year}-${Math.floor(Math.random() * 900) + 100}`
+
+                  await supabase.from('certificates').upsert({
+                    user_id,
+                    company_id: company.id,
+                    conversation_id,
+                    certificate_number: certNumber,
+                    score: avgScore,
+                  }, { onConflict: 'user_id,company_id' })
+
+                  await supabase
+                    .from('conversations')
+                    .update({ status: 'completed', score: avgScore, completed_at: new Date().toISOString() })
+                    .eq('id', conversation_id)
+
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+                    done: true, 
+                    moduleApproved: moduleName,
+                    approved: true, 
+                    certificate: { number: certNumber, score: avgScore },
+                    completedModules: newCompleted
+                  })}\n\n`))
+                } else {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+                    done: true, 
+                    moduleApproved: moduleName,
+                    approved: false,
+                    completedModules: newCompleted
+                  })}\n\n`))
+                }
+
+              } else if (fullMessage.includes('CERTIFICADO_APROBADO')) {
+                // Fallback — certificado directo (no debería pasar con prompts actualizados)
                 const scoreMatch = fullMessage.match(/punteo:\s*(\d+)/i)
                 const score = scoreMatch ? parseInt(scoreMatch[1]) : 85
                 const year = new Date().getFullYear()
                 const certNumber = `MA-${company_slug.toUpperCase().slice(0,2)}-${year}-${Math.floor(Math.random() * 900) + 100}`
 
-                await supabase.from('certificates').insert({
+                await supabase.from('certificates').upsert({
                   user_id,
                   company_id: company.id,
                   conversation_id,
                   certificate_number: certNumber,
                   score,
-                })
+                }, { onConflict: 'user_id,company_id' })
 
                 await supabase
                   .from('conversations')
                   .update({ status: 'completed', score, completed_at: new Date().toISOString() })
                   .eq('id', conversation_id)
 
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, approved: true, certificate: { number: certNumber, score } })}\n\n`))
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
+                  done: true, 
+                  approved: true,
+                  certificate: { number: certNumber, score }
+                })}\n\n`))
               } else {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ done: true, approved: false })}\n\n`))
               }
