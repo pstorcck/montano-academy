@@ -601,30 +601,42 @@ export default function AdminPage() {
             </div>
             {loadingModules ? (
               <p className="text-sm text-center" style={{ color: '#9A9AAA' }}>Cargando...</p>
-            ) : userModules.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-sm" style={{ color: '#9A9AAA' }}>No ha completado ningún módulo aún.</p>
-              </div>
             ) : (
               <div className="space-y-3">
-                {userModules.map((mod, i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-xl border"
-                    style={{ borderColor: '#E8E8E0', background: '#FAFAFA' }}>
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>{mod.module_name}</p>
-                      <p className="text-xs mt-1" style={{ color: '#9A9AAA' }}>
-                        {new Date(mod.completed_at).toLocaleDateString('es-GT', { year: 'numeric', month: 'long', day: 'numeric' })}
-                        {' · '}{mod.score}/100
-                      </p>
+                {[
+                  'Limpieza y Desinfección',
+                  'Higiene Personal y Prácticas Sanitarias',
+                  'Temperatura y Cadena de Frío',
+                  'Nutrición en Niños y Adolescentes',
+                  'Handball y Alimentación Deportiva',
+                ].map((moduleName, i) => {
+                  const completed = userModules.find(m => m.module_name === moduleName)
+                  return (
+                    <div key={i} className="flex items-center justify-between p-4 rounded-xl border"
+                      style={{ borderColor: '#E8E8E0', background: completed ? '#F0FDF4' : '#FAFAFA' }}>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>{moduleName}</p>
+                        <p className="text-xs mt-1" style={{ color: '#9A9AAA' }}>
+                          {completed
+                            ? `Completado · ${new Date(completed.completed_at).toLocaleDateString('es-GT', { year: 'numeric', month: 'short', day: 'numeric' })} · ${completed.score}/100`
+                            : 'Pendiente'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (completed) {
+                            window.open(`/api/certificate-pdf/modulo?module_id=${completed.id}`, '_blank')
+                          } else {
+                            window.open(`/api/certificate-pdf/modulo?user_id=${showModules.id}&company_id=${showModules.company_id}&module_name=${encodeURIComponent(moduleName)}`, '_blank')
+                          }
+                        }}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-md text-white flex-shrink-0"
+                        style={{ background: completed ? '#166534' : '#1A1A2E' }}>
+                        {completed ? '✓ Descargar' : 'Generar'}
+                      </button>
                     </div>
-                    <button
-                      onClick={() => window.open(`/api/certificate-pdf/modulo?module_id=${mod.id}`, '_blank')}
-                      className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
-                      style={{ background: '#1A1A2E' }}>
-                      Descargar PDF
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
             <div className="mt-6 flex justify-end">

@@ -30,14 +30,32 @@ function getLogoBase64(slug: string): string {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const moduleId = searchParams.get('module_id')
+  const userId = searchParams.get('user_id')
+  const companyId = searchParams.get('company_id')
+  const moduleName = searchParams.get('module_name')
 
-  if (!moduleId) return NextResponse.json({ error: 'Falta module_id' }, { status: 400 })
+  let mod: any = null
 
-  const { data: mod } = await supabaseAdmin
-    .from('module_progress')
-    .select('*, profiles(full_name), companies(name, slug, primary_color, secondary_color)')
-    .eq('id', moduleId)
-    .single()
+  if (moduleId) {
+    const { data } = await supabaseAdmin
+      .from('module_progress')
+      .select('*, profiles(full_name), companies(name, slug, primary_color, secondary_color)')
+      .eq('id', moduleId)
+      .single()
+    mod = data
+  } else if (userId && companyId && moduleName) {
+    const { data: profile } = await supabaseAdmin
+      .from('profiles').select('full_name').eq('id', userId).single()
+    const { data: company } = await supabaseAdmin
+      .from('companies').select('name, slug, primary_color, secondary_color').eq('id', companyId).single()
+    mod = {
+      module_name: moduleName,
+      score: 100,
+      completed_at: new Date().toISOString(),
+      profiles: profile,
+      companies: company,
+    }
+  }
 
   if (!mod) return NextResponse.json({ error: 'No encontrado' }, { status: 404 })
 
