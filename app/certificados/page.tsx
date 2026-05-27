@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getBranding } from '@/lib/branding'
 import { useRouter } from 'next/navigation'
@@ -9,8 +9,10 @@ export default function CertificadosPage() {
   const router = useRouter()
   const [profile, setProfile] = useState<any>(null)
   const [certificates, setCertificates] = useState<any[]>([])
+  const [moduleProgress, setModuleProgress] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<any>(null)
+  const [selectedType, setSelectedType] = useState<'general' | 'modulo'>('general')
   const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
@@ -32,8 +34,22 @@ export default function CertificadosPage() {
         .eq('user_id', user.id)
         .order('issued_at', { ascending: false })
 
+      const { data: modules } = await supabase
+        .from('module_progress')
+        .select('*, companies(name, slug, primary_color, secondary_color)')
+        .eq('user_id', user.id)
+        .order('completed_at', { ascending: false })
+
       setCertificates(certs || [])
-      if (certs && certs.length > 0) setSelected(certs[0])
+      setModuleProgress(modules || [])
+
+      if (certs && certs.length > 0) {
+        setSelected(certs[0])
+        setSelectedType('general')
+      } else if (modules && modules.length > 0) {
+        setSelected(modules[0])
+        setSelectedType('modulo')
+      }
       setLoading(false)
     }
     init()
@@ -42,7 +58,11 @@ export default function CertificadosPage() {
   const handleDownload = async () => {
     if (!selected) return
     setDownloading(true)
-    window.open(`/api/certificate-pdf?id=${selected.id}`, '_blank')
+    if (selectedType === 'general') {
+      window.open(`/api/certificate-pdf?id=${selected.id}`, '_blank')
+    } else {
+      window.open(`/api/certificate-pdf/modulo?module_id=${selected.id}`, '_blank')
+    }
     setDownloading(false)
   }
 
@@ -54,6 +74,7 @@ export default function CertificadosPage() {
 
   const branding = profile?.companies ? getBranding(profile.companies.slug) : getBranding('colegio-montano')
   const certBranding = selected?.companies ? getBranding(selected.companies.slug) : branding
+  const totalItems = certificates.length + moduleProgress.length
 
   return (
     <div className="min-h-screen flex" style={{ background: '#F0EEE8' }}>
@@ -123,7 +144,7 @@ export default function CertificadosPage() {
         </div>
 
         <div className="flex-1 p-8">
-          {certificates.length === 0 ? (
+          {totalItems === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
                 style={{ background: '#F0EEE8' }}>
@@ -133,7 +154,7 @@ export default function CertificadosPage() {
                 Aún no tienes certificados
               </h2>
               <p className="text-sm mb-6" style={{ color: '#9A9AAA' }}>
-                Completa tu inducción para obtener tu certificado
+                Completa tu inducción para obtener tu primer certificado
               </p>
               <button onClick={() => router.push('/induccion')}
                 className="px-6 py-3 rounded-xl text-sm font-bold text-white"
@@ -143,33 +164,78 @@ export default function CertificadosPage() {
             </div>
           ) : (
             <div className="flex gap-8">
-              {certificates.length > 1 && (
-                <div className="w-64 flex-shrink-0">
-                  <p className="text-xs font-bold uppercase tracking-widest mb-3"
-                    style={{ color: '#9A9AAA' }}>Mis certificados</p>
-                  {certificates.map(cert => (
-                    <div key={cert.id} onClick={() => setSelected(cert)}
-                      className="p-4 rounded-xl mb-2 cursor-pointer border transition-all"
-                      style={{
-                        background: selected?.id === cert.id ? 'white' : 'transparent',
-                        borderColor: selected?.id === cert.id ? '#E8E8E0' : 'transparent',
-                      }}>
-                      <p className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>
-                        {cert.companies?.name}
-                      </p>
-                      <p className="text-xs mt-1" style={{ color: '#9A9AAA' }}>
-                        {new Date(cert.issued_at).toLocaleDateString('es-GT', {
-                          year: 'numeric', month: 'long', day: 'numeric'
-                        })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
 
+              {/* Lista de certificados */}
+              <div className="w-72 flex-shrink-0">
+
+                {/* Certificados generales */}
+                {certificates.length > 0 && (
+                  <>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-3"
+                      style={{ color: '#9A9AAA' }}>Certificados generales</p>
+                    {certificates.map(cert => (
+                      <div key={cert.id}
+                        onClick={() => { setSelected(cert); setSelectedType('general') }}
+                        className="p-4 rounded-xl mb-2 cursor-pointer border transition-all"
+                        style={{
+                          background: selected?.id === cert.id && selectedType === 'general' ? 'white' : 'transparent',
+                          borderColor: selected?.id === cert.id && selectedType === 'general' ? '#E8E8E0' : 'transparent',
+                        }}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span style={{ fontSize: 16 }}>🏆</span>
+                          <p className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>
+                            {cert.companies?.name}
+                          </p>
+                        </div>
+                        <p className="text-xs" style={{ color: '#9A9AAA' }}>
+                          Inducción General · {cert.score}/100
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: '#BBBBBB' }}>
+                          {new Date(cert.issued_at).toLocaleDateString('es-GT', {
+                            year: 'numeric', month: 'short', day: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {/* Certificados por módulo */}
+                {moduleProgress.length > 0 && (
+                  <>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-3 mt-4"
+                      style={{ color: '#9A9AAA' }}>Certificados por módulo</p>
+                    {moduleProgress.map(mod => (
+                      <div key={mod.id}
+                        onClick={() => { setSelected(mod); setSelectedType('modulo') }}
+                        className="p-4 rounded-xl mb-2 cursor-pointer border transition-all"
+                        style={{
+                          background: selected?.id === mod.id && selectedType === 'modulo' ? 'white' : 'transparent',
+                          borderColor: selected?.id === mod.id && selectedType === 'modulo' ? '#E8E8E0' : 'transparent',
+                        }}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span style={{ fontSize: 16 }}>📋</span>
+                          <p className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>
+                            {mod.module_name}
+                          </p>
+                        </div>
+                        <p className="text-xs" style={{ color: '#9A9AAA' }}>
+                          {mod.companies?.name} · {mod.score}/100
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: '#BBBBBB' }}>
+                          {new Date(mod.completed_at).toLocaleDateString('es-GT', {
+                            year: 'numeric', month: 'short', day: 'numeric'
+                          })}
+                        </p>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+
+              {/* Vista previa */}
               {selected && (
                 <div className="flex-1 flex flex-col items-center">
-                  {/* Vista previa del certificado */}
                   <div className="bg-white shadow-2xl overflow-hidden" style={{ width: 720 }}>
                     <div style={{ height: 10, background: certBranding.bgColor }}></div>
                     <div style={{ height: 4, background: `linear-gradient(90deg, ${certBranding.secondaryColor}, ${certBranding.primaryColor})` }}></div>
@@ -178,8 +244,7 @@ export default function CertificadosPage() {
                         position: 'absolute', top: '50%', left: '50%',
                         transform: 'translate(-50%, -50%)',
                         fontSize: 160, fontWeight: 900, opacity: 0.03,
-                        color: certBranding.primaryColor, pointerEvents: 'none',
-                        whiteSpace: 'nowrap'
+                        color: certBranding.primaryColor, pointerEvents: 'none', whiteSpace: 'nowrap'
                       }}>
                         {certBranding.logoInitials}
                       </div>
@@ -197,13 +262,13 @@ export default function CertificadosPage() {
 
                       <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.2em',
                         textTransform: 'uppercase', color: '#9A9AAA', marginBottom: 8 }}>
-                        Grupo Montano · montano.academy
+                        {selected.companies?.name || certBranding.name} · montano.academy
                       </p>
-                      <h1 style={{ fontSize: 32, fontWeight: 800, color: certBranding.bgColor, marginBottom: 4 }}>
-                        Certificado de Finalización
+                      <h1 style={{ fontSize: 28, fontWeight: 800, color: certBranding.bgColor, marginBottom: 4 }}>
+                        {selectedType === 'general' ? 'Certificado de Finalización' : 'Certificado de Módulo'}
                       </h1>
                       <p style={{ fontSize: 12, color: '#9A9AAA', letterSpacing: '0.08em', marginBottom: 20 }}>
-                        Programa de Inducción Institucional · {new Date(selected.issued_at).getFullYear()}
+                        {selectedType === 'general' ? 'Programa de Inducción Institucional' : 'Centro de Capacitación'} · {new Date(selectedType === 'general' ? selected.issued_at : selected.completed_at).getFullYear()}
                       </p>
                       <div style={{ width: 60, height: 3, margin: '0 auto 20px',
                         background: `linear-gradient(90deg, ${certBranding.primaryColor}, ${certBranding.secondaryColor})` }}>
@@ -218,26 +283,29 @@ export default function CertificadosPage() {
                       <p style={{ fontSize: 13, color: '#9A9AAA', marginTop: 16, marginBottom: 4 }}>
                         ha completado satisfactoriamente
                       </p>
-                      <p style={{ fontSize: 20, fontWeight: 700, color: certBranding.bgColor, marginBottom: 24 }}>
-                        Inducción General — {selected.companies?.name}
+                      <p style={{ fontSize: 18, fontWeight: 700, color: certBranding.bgColor, marginBottom: 24 }}>
+                        {selectedType === 'general'
+                          ? `Inducción General — ${selected.companies?.name}`
+                          : selected.module_name}
                       </p>
                       <div style={{ display: 'flex', justifyContent: 'center', gap: 48,
                         paddingTop: 20, borderTop: '1px solid #F0F0F0' }}>
                         <div style={{ textAlign: 'center' }}>
                           <p style={{ fontSize: 13, fontWeight: 700, color: certBranding.bgColor }}>
-                            {new Date(selected.issued_at).toLocaleDateString('es-GT', {
-                              year: 'numeric', month: 'long', day: 'numeric'
-                            })}
+                            {new Date(selectedType === 'general' ? selected.issued_at : selected.completed_at)
+                              .toLocaleDateString('es-GT', { year: 'numeric', month: 'long', day: 'numeric' })}
                           </p>
                           <p style={{ fontSize: 10, color: '#9A9AAA', textTransform: 'uppercase',
                             letterSpacing: '0.08em', marginTop: 3 }}>Fecha de emisión</p>
                         </div>
-                        <div style={{ textAlign: 'center' }}>
-                          <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
-                            color: certBranding.bgColor }}>{selected.certificate_number}</p>
-                          <p style={{ fontSize: 10, color: '#9A9AAA', textTransform: 'uppercase',
-                            letterSpacing: '0.08em', marginTop: 3 }}>Número de certificado</p>
-                        </div>
+                        {selectedType === 'general' && (
+                          <div style={{ textAlign: 'center' }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace',
+                              color: certBranding.bgColor }}>{selected.certificate_number}</p>
+                            <p style={{ fontSize: 10, color: '#9A9AAA', textTransform: 'uppercase',
+                              letterSpacing: '0.08em', marginTop: 3 }}>Número de certificado</p>
+                          </div>
+                        )}
                         <div style={{ textAlign: 'center' }}>
                           <span style={{ fontSize: 13, fontWeight: 800, padding: '4px 14px',
                             borderRadius: 100, background: certBranding.bgColor,
@@ -245,15 +313,15 @@ export default function CertificadosPage() {
                             {selected.score}/100
                           </span>
                           <p style={{ fontSize: 10, color: '#9A9AAA', textTransform: 'uppercase',
-                            letterSpacing: '0.08em', marginTop: 6 }}>Punteo final</p>
+                            letterSpacing: '0.08em', marginTop: 6 }}>Punteo</p>
                         </div>
                       </div>
                     </div>
                     <div style={{ height: 6, background: `linear-gradient(90deg, ${certBranding.bgColor}, ${certBranding.primaryColor})` }}></div>
                   </div>
-
                   <p className="text-xs mt-4" style={{ color: '#9A9AAA' }}>
-                    Certificado #{selected.certificate_number} · Haz click en "Descargar PDF" para guardar
+                    {selectedType === 'general' ? `Certificado #${selected.certificate_number} · ` : ''}
+                    Haz click en "Descargar PDF" para guardar
                   </p>
                 </div>
               )}
