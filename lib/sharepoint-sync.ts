@@ -24,7 +24,12 @@ const COMPANY_CONFIG = [
   {
     companyId: '233536c1-e6e2-4fae-97e6-c43003db651a',
     folder: 'Conocimiento Agente/Vitanova',
-    vectorStoreId: 'vs_69d6d0eaf67881918e8a948c07821a65',
+    vectorStoreId: 'vs_6a1646e6b9cc8191b8c59bff8aef8b1d',
+  },
+  {
+    companyId: '233536c1-e6e2-4fae-97e6-c43003db651a',
+    folder: 'Conocimiento Agente/Vitanova Cultura',
+    vectorStoreId: 'vs_6a164d045008819196c88c889333a086',
   },
   {
     companyId: '47ec7280-d4c1-4332-aceb-4045259f9651',
