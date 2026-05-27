@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getBranding } from '@/lib/branding'
@@ -12,7 +12,7 @@ type Message = {
   streaming?: boolean
 }
 
-export default function InduccionPage() {
+function InduccionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const agentSlug = searchParams.get('agent') || 'cultura'
@@ -340,5 +340,17 @@ export default function InduccionPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function InduccionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0A0E1A' }}>
+        <div className="text-white text-sm">Cargando...</div>
+      </div>
+    }>
+      <InduccionContent />
+    </Suspense>
   )
 }
