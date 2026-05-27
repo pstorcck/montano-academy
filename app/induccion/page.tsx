@@ -43,12 +43,14 @@ function InduccionContent() {
       setProfile(profileData)
       setCompany(profileData.companies)
 
+      const currentAgentSlug = window.location.search.includes('agent=capacitacion') ? 'capacitacion' : 'cultura'
+
       const { data: existingConv } = await supabase
         .from('conversations')
         .select('*')
         .eq('user_id', user.id)
         .eq('company_id', profileData.company_id)
-        .eq('agent_slug', agentSlug)
+        .eq('agent_slug', currentAgentSlug)
         .order('started_at', { ascending: false })
         .limit(1)
         .single()
@@ -91,7 +93,7 @@ function InduccionContent() {
       } else {
         const { data: newConv } = await supabase
           .from('conversations')
-          .insert({ user_id: user.id, company_id: profileData.company_id, status: 'active', agent_slug: agentSlug })
+          .insert({ user_id: user.id, company_id: profileData.company_id, status: 'active', agent_slug: currentAgentSlug })
           .select().single()
 
         if (newConv) {
