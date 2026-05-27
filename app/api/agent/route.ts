@@ -168,7 +168,8 @@ export async function POST(req: NextRequest) {
                     conversation_id,
                     certificate_number: certNumber,
                     score: avgScore,
-                  }, { onConflict: 'user_id,company_id' })
+                    agent_slug: agent_slug || 'cultura',
+                  }, { onConflict: 'user_id,company_id,agent_slug' })
 
                   await supabase
                     .from('conversations')
