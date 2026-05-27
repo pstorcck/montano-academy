@@ -12,7 +12,7 @@ const supabase = createClient(
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { messages, company_slug, conversation_id, user_id } = body
+    const { messages, company_slug, agent_slug, conversation_id, user_id } = body
     console.log('Request recibido:', { company_slug, conversation_id, user_id, messagesCount: messages?.length })
 
     const { data: company } = await supabase
@@ -23,11 +23,16 @@ export async function POST(req: NextRequest) {
 
     if (!company) return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
 
-    const { data: agentConfig } = await supabase
+    let agentQuery = supabase
       .from('agent_configs')
       .select('*')
       .eq('company_id', company.id)
-      .single()
+
+    if (agent_slug) {
+      agentQuery = agentQuery.eq('agent_slug', agent_slug)
+    }
+
+    const { data: agentConfig } = await agentQuery.single()
 
     if (!agentConfig?.openai_assistant_id) {
       return NextResponse.json({ error: 'Assistant no configurado' }, { status: 404 })

@@ -185,49 +185,96 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="text-sm font-bold mb-4" style={{ color: '#1A1A2E' }}>Mi curso asignado</div>
+          <div className="text-sm font-bold mb-4" style={{ color: '#1A1A2E' }}>
+            {company?.slug === 'vitanova' ? 'Mis programas disponibles' : 'Mi curso asignado'}
+          </div>
 
-          <div className="bg-white rounded-2xl overflow-hidden border max-w-md cursor-pointer hover:shadow-lg transition-all"
-            style={{ borderColor: '#E8E8E0' }}
-            onClick={() => router.push('/induccion')}>
-            <div className="p-6 relative overflow-hidden"
-              style={{ background: `linear-gradient(135deg, ${branding.bgColor}, ${branding.primaryColor})` }}>
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 w-20 h-20 opacity-15">
-                <img src={branding.logoUrl} alt={branding.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          <div className={`flex gap-4 ${company?.slug === 'vitanova' ? 'flex-col' : ''}`}>
+
+            {/* Chat principal — todos */}
+            <div className="bg-white rounded-2xl overflow-hidden border max-w-md cursor-pointer hover:shadow-lg transition-all"
+              style={{ borderColor: '#E8E8E0' }}
+              onClick={() => router.push('/induccion')}>
+              <div className="p-6 relative overflow-hidden"
+                style={{ background: `linear-gradient(135deg, ${branding.bgColor}, ${branding.primaryColor})` }}>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 w-20 h-20 opacity-15">
+                  <img src={branding.logoUrl} alt={branding.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+                <div className="text-xs font-bold uppercase tracking-widest mb-1"
+                  style={{ color: branding.secondaryColor }}>{branding.name}</div>
+                <div className="text-lg font-bold text-white">
+                  {company?.slug === 'vitanova' ? 'Cultura Vitanova' : 'Inducción General'}
+                </div>
+                <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  Conversación con {branding.agentName}
+                </div>
               </div>
-              <div className="text-xs font-bold uppercase tracking-widest mb-1"
-                style={{ color: branding.secondaryColor }}>{branding.name}</div>
-              <div className="text-lg font-bold text-white">Inducción General</div>
-              <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                Conversación con {branding.agentName}
-              </div>
-            </div>
-            <div className="p-5">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-sm font-semibold px-3 py-1 rounded-full"
-                  style={{
-                    background: status === 'completed' ? '#DCFCE7' : status === 'active' ? '#FFFBE6' : '#F3F4F6',
-                    color: status === 'completed' ? '#166534' : status === 'active' ? '#B45309' : '#6B7280'
-                  }}>
-                  {status === 'completed' ? 'Completado' : status === 'active' ? 'En progreso' : 'Sin iniciar'}
-                </span>
-                {certificate && (
-                  <span className="text-sm font-bold" style={{ color: branding.primaryColor }}>
-                    {certificate.score}/100
+              <div className="p-5">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm font-semibold px-3 py-1 rounded-full"
+                    style={{
+                      background: status === 'completed' ? '#DCFCE7' : status === 'active' ? '#FFFBE6' : '#F3F4F6',
+                      color: status === 'completed' ? '#166534' : status === 'active' ? '#B45309' : '#6B7280'
+                    }}>
+                    {status === 'completed' ? 'Completado' : status === 'active' ? 'En progreso' : 'Sin iniciar'}
                   </span>
-                )}
+                  {certificate && (
+                    <span className="text-sm font-bold" style={{ color: branding.primaryColor }}>
+                      {certificate.score}/100
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-4 text-xs mb-4" style={{ color: '#9A9AAA' }}>
+                  <span>{branding.agentName}</span>
+                  <span>~60 min</span>
+                  <span>Certificado incluido</span>
+                </div>
+                <button className="w-full py-3 rounded-xl text-sm font-bold text-white"
+                  style={{ background: status === 'completed' ? '#6B7280' : branding.primaryColor }}>
+                  {status === 'completed' ? 'Ver conversación' : status === 'active' ? 'Continuar' : 'Iniciar'}
+                </button>
               </div>
-              <div className="flex gap-4 text-xs mb-4" style={{ color: '#9A9AAA' }}>
-                <span>{branding.agentName}</span>
-                <span>~60 min</span>
-                <span>Certificado incluido</span>
-              </div>
-              <button className="w-full py-3 rounded-xl text-sm font-bold text-white"
-                style={{ background: status === 'completed' ? '#6B7280' : branding.primaryColor }}>
-                {status === 'completed' ? 'Ver conversación' : status === 'active' ? 'Continuar induccion' : 'Iniciar mi induccion'}
-              </button>
             </div>
+
+            {/* Centro de Capacitación — solo Vitanova */}
+            {company?.slug === 'vitanova' && (
+              <div className="bg-white rounded-2xl overflow-hidden border max-w-md cursor-pointer hover:shadow-lg transition-all"
+                style={{ borderColor: '#E8E8E0' }}
+                onClick={() => router.push('/induccion?agent=capacitacion')}>
+                <div className="p-6 relative overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #0055B8, #D41367)' }}>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 w-20 h-20 opacity-15">
+                    <img src={branding.logoUrl} alt={branding.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  </div>
+                  <div className="text-xs font-bold uppercase tracking-widest mb-1"
+                    style={{ color: '#2ED9C3' }}>Vitanova</div>
+                  <div className="text-lg font-bold text-white">Centro de Capacitación</div>
+                  <div className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    Conversación con Vita · 5 módulos certificables
+                  </div>
+                </div>
+                <div className="p-5">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-sm font-semibold px-3 py-1 rounded-full"
+                      style={{ background: '#F3F4F6', color: '#6B7280' }}>
+                      Disponible
+                    </span>
+                  </div>
+                  <div className="flex gap-4 text-xs mb-4" style={{ color: '#9A9AAA' }}>
+                    <span>Vita</span>
+                    <span>5 módulos</span>
+                    <span>Certificado por módulo</span>
+                  </div>
+                  <button className="w-full py-3 rounded-xl text-sm font-bold text-white"
+                    style={{ background: '#D41367' }}>
+                    Ir al Centro de Capacitación
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>

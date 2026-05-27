@@ -48,6 +48,18 @@ export const COMPANY_BRANDING: Record<string, CompanyBranding> = {
     logoInitials: 'VN',
     logoUrl: '/logo-vitanova.jpg',
   },
+  'vitanova-capacitacion': {
+    name: 'Centro de Capacitación Vitanova',
+    slug: 'vitanova',
+    primaryColor: '#D41367',
+    secondaryColor: '#2ED9C3',
+    bgColor: '#0055B8',
+    textOnPrimary: '#FFFFFF',
+    agentName: 'Vita',
+    tagline: 'Inocuidad · Nutrición · Buenas Prácticas',
+    logoInitials: 'VN',
+    logoUrl: '/logo-vitanova.jpg',
+  },
   'escolaris': {
     name: 'Escolaris',
     slug: 'escolaris',

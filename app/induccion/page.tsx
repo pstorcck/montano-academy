@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { getBranding } from '@/lib/branding'
 import { useRouter } from 'next/navigation'
@@ -13,6 +14,8 @@ type Message = {
 
 export default function InduccionPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const agentSlug = searchParams.get('agent') || 'cultura'
   const [profile, setProfile] = useState<any>(null)
   const [company, setCompany] = useState<any>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -132,6 +135,7 @@ export default function InduccionPage() {
         body: JSON.stringify({
           messages: msgs,
           company_slug: slug,
+          agent_slug: agentSlug,
           conversation_id: convId,
           user_id: userId,
         })
