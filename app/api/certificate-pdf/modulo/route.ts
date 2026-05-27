@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
     year: 'numeric', month: 'long', day: 'numeric'
   })
   const year = new Date(mod.completed_at).getFullYear()
-  const certNumber = `MOD-${slug.toUpperCase().slice(0,2)}-${year}-${moduleId.slice(-4).toUpperCase()}`
+  const certNumber = `MOD-${slug.toUpperCase().slice(0,2)}-${year}-${(moduleId || mod.module_name || 'GEN').slice(-4).toUpperCase()}`
 
   const html = `<!DOCTYPE html>
 <html lang="es">
