@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { messages, company_slug, agent_slug, conversation_id, user_id } = body
-    console.log('Request recibido:', { company_slug, conversation_id, user_id, messagesCount: messages?.length })
+    console.log('Request recibido:', { company_slug, agent_slug, conversation_id, user_id, messagesCount: messages?.length })
 
     const { data: company } = await supabase
       .from('companies')
