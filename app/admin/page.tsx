@@ -207,8 +207,8 @@ export default function AdminPage() {
     XLSX.writeFile(wb, `usuarios-montano-${new Date().toISOString().slice(0,10)}.xlsx`)
   }
 
-  const handleGenerateCert = async (userId: string, companyId: string) => {
-    window.open(`/api/certificate-pdf?user_id=${userId}&company_id=${companyId}`, '_blank')
+  const handleGenerateCert = async (userId: string, companyId: string, agentSlug: string = 'cultura') => {
+    window.open(`/api/certificate-pdf?user_id=${userId}&company_id=${companyId}&agent_slug=${agentSlug}`, '_blank')
   }
 
   const filteredUsers = filterCompany === 'all' ? users : users.filter(u => u.company_id === filterCompany)
@@ -425,12 +425,27 @@ export default function AdminPage() {
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                          {user.companies?.slug === 'vitanova' ? (
+                            <>
+                              <button onClick={() => handleGenerateCert(user.id, user.company_id, 'cultura')}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all hover:bg-gray-50"
+                                style={{ borderColor: '#E8E8E0', color: '#374151' }}>
+                                Cert. Cultura
+                              </button>
+                              <button onClick={() => handleGenerateCert(user.id, user.company_id, 'capacitacion')}
+                                className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all hover:bg-blue-50"
+                                style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}>
+                                Cert. Capacitación
+                              </button>
+                            </>
+                          ) : (
                           <button onClick={() => handleGenerateCert(user.id, user.company_id)}
                             className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all hover:bg-gray-50"
                             style={{ borderColor: '#E8E8E0', color: '#374151' }}>
                             Certificado
                           </button>
+                          )}
                           <button onClick={() => setConfirmDelete(user)}
                             className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all hover:bg-red-50"
                             style={{ borderColor: '#FECACA', color: '#DC2626' }}>

@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
   const certId = searchParams.get('id')
   const userId = searchParams.get('user_id')
   const companyId = searchParams.get('company_id')
+  const agentSlug = searchParams.get('agent_slug') || 'cultura'
 
   let cert: any = null
 
@@ -54,7 +55,8 @@ export async function GET(req: NextRequest) {
 
     const { data: existingCert } = await supabaseAdmin
       .from('certificates').select('*')
-      .eq('user_id', userId).eq('company_id', companyId).single()
+      .eq('user_id', userId).eq('company_id', companyId)
+      .eq('agent_slug', agentSlug).maybeSingle()
 
     if (existingCert) {
       cert = { ...existingCert, profiles: profile, companies: company }
@@ -64,7 +66,7 @@ export async function GET(req: NextRequest) {
       const certNumber = `MA-${slug}-${year}-${Math.floor(Math.random() * 900) + 100}`
       const { data: newCert } = await supabaseAdmin
         .from('certificates')
-        .insert({ user_id: userId, company_id: companyId, certificate_number: certNumber, score: 100 })
+        .insert({ user_id: userId, company_id: companyId, certificate_number: certNumber, score: 100, agent_slug: agentSlug })
         .select().single()
       cert = { ...newCert, profiles: profile, companies: company }
     }
