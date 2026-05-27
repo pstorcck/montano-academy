@@ -112,8 +112,9 @@ function InduccionContent() {
 
   const sendInitialMessage = async (slug: string, convId: string, userId: string) => {
     setLoading(true)
+    const greeting = agentSlug === 'capacitacion' ? 'Hola, estoy listo para comenzar mi capacitación.' : 'Hola, estoy listo para comenzar mi inducción.'
     await sendStreamMessage(
-      [{ role: 'user', content: 'Hola, estoy listo para comenzar mi inducción.' }],
+      [{ role: 'user', content: greeting }],
       slug, convId, userId, true
     )
     setLoading(false)
@@ -126,7 +127,7 @@ function InduccionContent() {
       setMessages(prev => [...prev, { role: 'assistant', content: '', streaming: true }])
     } else {
       setMessages([
-        { role: 'user', content: 'Hola, estoy listo para comenzar mi inducción.' },
+        { role: 'user', content: agentSlug === 'capacitacion' ? 'Hola, estoy listo para comenzar mi capacitación.' : 'Hola, estoy listo para comenzar mi inducción.' },
         { role: 'assistant', content: '', streaming: true }
       ])
     }
