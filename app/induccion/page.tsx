@@ -43,14 +43,12 @@ function InduccionContent() {
       setProfile(profileData)
       setCompany(profileData.companies)
 
-      const agentSlugVal = new URLSearchParams(window.location.search).get('agent') || 'cultura'
-
       const { data: existingConv } = await supabase
         .from('conversations')
         .select('*')
         .eq('user_id', user.id)
         .eq('company_id', profileData.company_id)
-        .eq('agent_slug', agentSlugVal)
+        .eq('agent_slug', agentSlug)
         .order('started_at', { ascending: false })
         .limit(1)
         .single()
@@ -93,7 +91,7 @@ function InduccionContent() {
       } else {
         const { data: newConv } = await supabase
           .from('conversations')
-          .insert({ user_id: user.id, company_id: profileData.company_id, status: 'active', agent_slug: agentSlugVal })
+          .insert({ user_id: user.id, company_id: profileData.company_id, status: 'active', agent_slug: agentSlug })
           .select().single()
 
         if (newConv) {
@@ -104,7 +102,7 @@ function InduccionContent() {
       }
     }
     init()
-  }, [router])
+  }, [router, agentSlug])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
