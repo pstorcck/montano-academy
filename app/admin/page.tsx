@@ -31,6 +31,9 @@ export default function AdminPage() {
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
   const [syncingPrompts, setSyncingPrompts] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<any>(null)
+  const [showModules, setShowModules] = useState<any>(null)
+  const [userModules, setUserModules] = useState<any[]>([])
+  const [loadingModules, setLoadingModules] = useState(false)
 
   const [newUser, setNewUser] = useState({
     full_name: '', email: '', password: '',
@@ -205,6 +208,19 @@ export default function AdminPage() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Usuarios')
     XLSX.writeFile(wb, `usuarios-montano-${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
+
+  const handleViewModules = async (user: any) => {
+    setLoadingModules(true)
+    setShowModules(user)
+    const { data } = await supabase
+      .from('module_progress')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('company_id', user.company_id)
+      .order('completed_at', { ascending: false })
+    setUserModules(data || [])
+    setLoadingModules(false)
   }
 
   const handleGenerateCert = async (userId: string, companyId: string, agentSlug: string = 'cultura') => {
@@ -433,10 +449,10 @@ export default function AdminPage() {
                                 style={{ borderColor: '#E8E8E0', color: '#374151' }}>
                                 Cert. Cultura
                               </button>
-                              <button onClick={() => handleGenerateCert(user.id, user.company_id, 'capacitacion')}
+                              <button onClick={() => handleViewModules(user)}
                                 className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all hover:bg-blue-50"
                                 style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}>
-                                Cert. Capacitación
+                                Ver módulos
                               </button>
                             </>
                           ) : (
@@ -568,6 +584,55 @@ export default function AdminPage() {
                   {creating ? 'Enviando...' : 'Enviar invitación'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MÓDULOS COMPLETADOS */}
+      {showModules && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(0,0,0,0.4)' }}>
+          <div className="bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl max-h-screen overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-base font-bold" style={{ color: '#1A1A2E' }}>
+                Módulos — {showModules.full_name}
+              </h3>
+              <button onClick={() => setShowModules(null)} className="text-lg cursor-pointer" style={{ color: '#9A9AAA' }}>×</button>
+            </div>
+            {loadingModules ? (
+              <p className="text-sm text-center" style={{ color: '#9A9AAA' }}>Cargando...</p>
+            ) : userModules.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-sm" style={{ color: '#9A9AAA' }}>No ha completado ningún módulo aún.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {userModules.map((mod, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 rounded-xl border"
+                    style={{ borderColor: '#E8E8E0', background: '#FAFAFA' }}>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>{mod.module_name}</p>
+                      <p className="text-xs mt-1" style={{ color: '#9A9AAA' }}>
+                        {new Date(mod.completed_at).toLocaleDateString('es-GT', { year: 'numeric', month: 'long', day: 'numeric' })}
+                        {' · '}{mod.score}/100
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => window.open(`/api/certificate-pdf/modulo?module_id=${mod.id}`, '_blank')}
+                      className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
+                      style={{ background: '#1A1A2E' }}>
+                      Descargar PDF
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-6 flex justify-end">
+              <button onClick={() => setShowModules(null)}
+                className="px-5 py-2 rounded-lg text-sm font-semibold border"
+                style={{ borderColor: '#E8E8E0', color: '#374151' }}>
+                Cerrar
+              </button>
             </div>
           </div>
         </div>
