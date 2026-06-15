@@ -15,7 +15,7 @@ type Message = {
 function InduccionContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const agentSlug = searchParams.get('agent') || 'cultura'
+  const agentSlug = searchParams.get('agent') ?? 'cultura'
   const [profile, setProfile] = useState<any>(null)
   const [company, setCompany] = useState<any>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -25,6 +25,8 @@ function InduccionContent() {
   const [approved, setApproved] = useState(false)
   const [certificate, setCertificate] = useState<any>(null)
   const [initializing, setInitializing] = useState(true)
+  const [moduleApproved, setModuleApproved] = useState<string | null>(null)
+  const [completedModules, setCompletedModules] = useState<string[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -45,6 +47,17 @@ function InduccionContent() {
 
       const currentAgentSlug = window.location.search.includes('agent=capacitacion') ? 'capacitacion' : 'cultura'
 
+      // Cargar módulos completados
+      const { data: modProgress } = await supabase
+        .from('module_progress')
+        .select('module_name')
+        .eq('user_id', user.id)
+        .eq('company_id', profileData.company_id)
+
+      if (modProgress) {
+        setCompletedModules(modProgress.map(m => m.module_name))
+      }
+
       const { data: existingConv } = await supabase
         .from('conversations')
         .select('*')
@@ -60,11 +73,12 @@ function InduccionContent() {
         .select('*')
         .eq('user_id', user.id)
         .eq('company_id', profileData.company_id)
-        .single()
+        .eq('agent_slug', currentAgentSlug)
+        .maybeSingle()
 
       if (cert) { setCertificate(cert); setApproved(true) }
 
-      if (existingConv && existingConv.status !== 'completed') {
+      if (existingConv) {
         setConversationId(existingConv.id)
         const { data: prevMessages } = await supabase
           .from('messages')
@@ -74,22 +88,9 @@ function InduccionContent() {
 
         if (prevMessages && prevMessages.length > 0) {
           setMessages(prevMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })))
-          setInitializing(false)
         } else {
           await sendInitialMessage(profileData.companies.slug, existingConv.id, user.id)
-          setInitializing(false)
         }
-      } else if (existingConv && existingConv.status === 'completed') {
-        setConversationId(existingConv.id)
-        const { data: prevMessages } = await supabase
-          .from('messages')
-          .select('*')
-          .eq('conversation_id', existingConv.id)
-          .order('created_at', { ascending: true })
-        if (prevMessages) {
-          setMessages(prevMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })))
-        }
-        setInitializing(false)
       } else {
         const { data: newConv } = await supabase
           .from('conversations')
@@ -100,8 +101,8 @@ function InduccionContent() {
           setConversationId(newConv.id)
           await sendInitialMessage(profileData.companies.slug, newConv.id, user.id)
         }
-        setInitializing(false)
       }
+      setInitializing(false)
     }
     init()
   }, [router, agentSlug])
@@ -110,9 +111,19 @@ function InduccionContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Auto-ocultar notificación de módulo
+  useEffect(() => {
+    if (moduleApproved) {
+      const t = setTimeout(() => setModuleApproved(null), 5000)
+      return () => clearTimeout(t)
+    }
+  }, [moduleApproved])
+
   const sendInitialMessage = async (slug: string, convId: string, userId: string) => {
     setLoading(true)
-    const greeting = agentSlug === 'capacitacion' ? 'Hola, estoy listo para comenzar mi capacitación.' : 'Hola, estoy listo para comenzar mi inducción.'
+    const greeting = agentSlug === 'capacitacion'
+      ? 'Hola, estoy listo para comenzar mi capacitación.'
+      : 'Hola, estoy listo para comenzar mi inducción.'
     await sendStreamMessage(
       [{ role: 'user', content: greeting }],
       slug, convId, userId, true
@@ -185,14 +196,23 @@ function InduccionContent() {
                   return updated
                 })
 
+                // Módulo aprobado
+                if (data.moduleApproved) {
+                  setModuleApproved(data.moduleApproved)
+                  setCompletedModules(prev => [...new Set([...prev, data.moduleApproved])])
+                }
+
+                // Certificado general aprobado
                 if (data.approved) {
                   setApproved(true)
                   const { data: cert } = await supabase
                     .from('certificates')
                     .select('*')
                     .eq('user_id', userId)
-                    .single()
-                  setCertificate(cert)
+                    .eq('company_id', profile?.company_id || '')
+                    .eq('agent_slug', agentSlug)
+                    .maybeSingle()
+                  if (cert) setCertificate(cert)
                 }
               }
             } catch {}
@@ -200,7 +220,6 @@ function InduccionContent() {
         }
       }
     } catch (err) {
-      console.error('Stream error:', err)
       setMessages(prev => {
         const updated = [...prev]
         const last = updated[updated.length - 1]
@@ -227,119 +246,189 @@ function InduccionContent() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
-  const handleDownloadCert = () => {
-    if (certificate) window.open(`/api/certificate-pdf?id=${certificate.id}`, '_blank')
-  }
-
   if (initializing) return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#0A0E1A' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#F5F7FA' }}>
       <div className="text-center">
-        <div className="text-white text-sm mb-2">Cargando tu inducción...</div>
-        <div className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Preparando el agente</div>
+        <div className="flex items-center gap-2 justify-center mb-3">
+          <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#3B5BDB', animationDelay: '0ms' }}></div>
+          <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#3B5BDB', animationDelay: '150ms' }}></div>
+          <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#3B5BDB', animationDelay: '300ms' }}></div>
+        </div>
+        <div className="text-sm font-medium" style={{ color: '#64748B' }}>Preparando tu sesión...</div>
       </div>
     </div>
   )
 
-  const branding = company ? getBranding(company.slug) : getBranding('colegio-montano')
+  const branding = company ? getBranding(agentSlug === 'capacitacion' ? 'vitanova-capacitacion' : company.slug) : getBranding('colegio-montano')
+  const isCapacitacion = agentSlug === 'capacitacion'
+  const chatTitle = isCapacitacion ? 'Centro de Capacitación' : 'Inducción General'
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#F8F7F4' }}>
-      <div className="bg-white border-b px-6 h-14 flex items-center justify-between sticky top-0 z-10"
-        style={{ borderColor: '#E8E8E0' }}>
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen flex flex-col" style={{ background: '#F5F7FA' }}>
+
+      {/* Header */}
+      <div className="bg-white border-b px-6 h-16 flex items-center justify-between sticky top-0 z-10"
+        style={{ borderColor: '#E8ECF0' }}>
+        <div className="flex items-center gap-4">
           <button onClick={() => router.push('/dashboard')}
-            className="text-sm cursor-pointer" style={{ color: '#9A9AAA' }}>← Dashboard</button>
-          <div className="w-px h-4" style={{ background: '#E8E8E0' }}></div>
-          <div className="w-20 h-10 rounded-lg overflow-hidden bg-white border flex items-center justify-center px-1"
-            style={{ borderColor: '#E8E8E0' }}>
+            className="flex items-center gap-1.5 text-sm font-medium transition-colors hover:opacity-70"
+            style={{ color: '#94A3B8' }}>
+            ← Dashboard
+          </button>
+          <div className="w-px h-5" style={{ background: '#E2E8F0' }}></div>
+          <div className="w-24 h-10 rounded-xl overflow-hidden bg-white border flex items-center justify-center px-2"
+            style={{ borderColor: '#E2E8F0' }}>
             <img src={branding.logoUrl} alt={branding.name}
               style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           </div>
           <div>
-            <span className="text-sm font-semibold" style={{ color: '#1A1A2E' }}>Inducción General</span>
-            <span className="text-xs ml-2" style={{ color: '#9A9AAA' }}>con {branding.agentName}</span>
+            <p className="text-sm font-bold" style={{ color: '#0F172A' }}>{chatTitle}</p>
+            <p className="text-xs" style={{ color: '#94A3B8' }}>con {branding.agentName}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {approved && (
-            <span className="text-xs font-semibold px-3 py-1 rounded-full"
-              style={{ background: '#DCFCE7', color: '#166534' }}>Completado</span>
+        <div className="flex items-center gap-2">
+          {isCapacitacion && completedModules.length > 0 && (
+            <span className="text-xs font-semibold px-3 py-1.5 rounded-full"
+              style={{ background: '#EEF2FF', color: '#3B5BDB' }}>
+              {completedModules.length} módulo{completedModules.length !== 1 ? 's' : ''} completado{completedModules.length !== 1 ? 's' : ''}
+            </span>
           )}
-          <span className="text-xs px-3 py-1 rounded-full font-semibold"
-            style={{ background: '#F3F4F6', color: '#6B7280' }}>
+          {approved && (
+            <span className="text-xs font-semibold px-3 py-1.5 rounded-full"
+              style={{ background: '#DCFCE7', color: '#166534' }}>
+              ✓ Certificado emitido
+            </span>
+          )}
+          <span className="text-xs px-3 py-1.5 rounded-full font-medium"
+            style={{ background: '#F1F5F9', color: '#64748B' }}>
             {messages.filter(m => m.role === 'user').length} respuestas
           </span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 max-w-3xl mx-auto w-full">
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex mb-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            {msg.role === 'assistant' && (
-              <div className="w-12 h-12 rounded-lg flex items-center justify-center mr-3 flex-shrink-0 mt-1 overflow-hidden bg-white border"
-                style={{ borderColor: '#E8E8E0' }}>
-                <img src={branding.logoUrl} alt="agente"
-                  style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
+      {/* Notificación módulo aprobado */}
+      {moduleApproved && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-6 py-4 rounded-2xl shadow-xl flex items-center gap-4"
+          style={{ background: 'white', border: '1px solid #BBF7D0', minWidth: 340 }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: '#DCFCE7' }}>
+            <span className="text-xl">🏅</span>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold" style={{ color: '#0F172A' }}>¡Módulo aprobado!</p>
+            <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>{moduleApproved}</p>
+          </div>
+          <button
+            onClick={() => router.push('/certificados')}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
+            style={{ background: '#166534', color: 'white' }}>
+            Ver certificado
+          </button>
+          <button onClick={() => setModuleApproved(null)} style={{ color: '#94A3B8' }}>×</button>
+        </div>
+      )}
+
+      {/* Mensajes */}
+      <div className="flex-1 overflow-y-auto py-6" style={{ background: '#F5F7FA' }}>
+        <div className="max-w-3xl mx-auto px-4 space-y-4">
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-3`}>
+              {msg.role === 'assistant' && (
+                <div className="w-9 h-9 rounded-xl overflow-hidden bg-white border flex-shrink-0 flex items-center justify-center"
+                  style={{ borderColor: '#E2E8F0' }}>
+                  <img src={branding.logoUrl} alt="agente"
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4 }} />
+                </div>
+              )}
+              <div className="max-w-lg">
+                <div className="px-4 py-3 rounded-2xl text-sm leading-relaxed"
+                  style={{
+                    background: msg.role === 'user' ? branding.primaryColor : 'white',
+                    color: msg.role === 'user' ? 'white' : '#1A1A2E',
+                    border: msg.role === 'assistant' ? '1px solid #E2E8F0' : 'none',
+                    borderRadius: msg.role === 'user' ? '20px 20px 4px 20px' : '4px 20px 20px 20px',
+                    boxShadow: msg.role === 'assistant' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'
+                  }}>
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
+                  {msg.streaming && (
+                    <span className="inline-flex gap-1 mt-1">
+                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '0ms' }}></span>
+                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '150ms' }}></span>
+                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '300ms' }}></span>
+                    </span>
+                  )}
+                </div>
               </div>
-            )}
-            <div className="max-w-lg px-4 py-3 rounded-2xl text-sm leading-relaxed"
-              style={{
-                background: msg.role === 'user' ? branding.primaryColor : 'white',
-                color: msg.role === 'user' ? 'white' : '#1A1A2E',
-                border: msg.role === 'assistant' ? '1px solid #E8E8E0' : 'none',
-                borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
-              }}>
-              <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
-
+              {msg.role === 'user' && (
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                  style={{ background: branding.primaryColor }}>
+                  {profile?.full_name?.charAt(0) || 'U'}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          ))}
 
-        {approved && certificate && (
-          <div className="rounded-2xl p-6 text-center mb-4"
-            style={{ background: `linear-gradient(135deg, ${branding.bgColor}, ${branding.primaryColor})` }}>
-            <div className="text-3xl mb-2">🏆</div>
-            <h3 className="text-white font-bold text-lg mb-1">¡Felicidades!</h3>
-            <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.7)' }}>
-              Completaste tu inducción exitosamente
-            </p>
-            <div className="flex gap-3 justify-center">
-              <button onClick={handleDownloadCert}
-                className="px-5 py-2 rounded-xl text-sm font-bold"
-                style={{ background: branding.secondaryColor, color: branding.bgColor }}>
-                Descargar certificado
-              </button>
-              <button onClick={() => router.push('/certificados')}
-                className="px-5 py-2 rounded-xl text-sm font-bold text-white border"
-                style={{ borderColor: 'rgba(255,255,255,0.3)' }}>
-                Ver certificado
-              </button>
+          {/* Banner certificado general */}
+          {approved && certificate && (
+            <div className="rounded-2xl p-6 text-center mt-4"
+              style={{ background: `linear-gradient(135deg, ${branding.bgColor}, ${branding.primaryColor})` }}>
+              <div className="text-4xl mb-3">🏆</div>
+              <h3 className="text-white font-bold text-lg mb-1">¡Felicidades!</h3>
+              <p className="text-sm mb-5" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                Completaste exitosamente tu {isCapacitacion ? 'capacitación' : 'inducción'}
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button onClick={() => window.open(`/api/certificate-pdf?id=${certificate.id}`, '_blank')}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
+                  style={{ background: branding.secondaryColor, color: branding.bgColor }}>
+                  ↓ Descargar certificado
+                </button>
+                <button onClick={() => router.push('/certificados')}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold text-white border transition-all"
+                  style={{ borderColor: 'rgba(255,255,255,0.3)' }}>
+                  Ver todos mis certificados
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
-      {(
-        <div className="bg-white border-t px-4 py-4" style={{ borderColor: '#E8E8E0' }}>
-          <div className="max-w-3xl mx-auto flex gap-3">
-            <textarea value={input} onChange={e => setInput(e.target.value)}
+      {/* Input */}
+      <div className="bg-white border-t px-4 py-4" style={{ borderColor: '#E2E8F0' }}>
+        <div className="max-w-3xl mx-auto">
+          <div className="flex gap-3 items-end">
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Escribe tu respuesta..." rows={1}
-              className="flex-1 border rounded-xl px-4 py-3 text-sm outline-none resize-none"
-              style={{ borderColor: '#E8E8E0', color: '#1A1A2E' }} />
-            <button onClick={sendMessage} disabled={loading || !input.trim()}
-              className="px-5 py-3 rounded-xl text-sm font-bold text-white transition-all"
-              style={{ background: loading || !input.trim() ? '#D1D5DB' : branding.primaryColor }}>
-              {loading ? '...' : 'Enviar'}
+              placeholder={loading ? 'El agente está respondiendo...' : 'Escribe tu respuesta...'}
+              rows={1}
+              disabled={loading}
+              className="flex-1 border rounded-2xl px-4 py-3 text-sm outline-none resize-none transition-all"
+              style={{
+                borderColor: '#E2E8F0',
+                color: '#0F172A',
+                background: loading ? '#F8FAFC' : 'white',
+                maxHeight: 120
+              }}
+            />
+            <button
+              onClick={sendMessage}
+              disabled={loading || !input.trim()}
+              className="px-5 py-3 rounded-2xl text-sm font-bold text-white transition-all flex-shrink-0"
+              style={{ background: loading || !input.trim() ? '#E2E8F0' : branding.primaryColor,
+                color: loading || !input.trim() ? '#94A3B8' : 'white' }}>
+              {loading ? '...' : '↑'}
             </button>
           </div>
-          <p className="text-center text-xs mt-2" style={{ color: '#9A9AAA' }}>
+          <p className="text-center text-xs mt-2" style={{ color: '#CBD5E1' }}>
             Enter para enviar · Tu progreso se guarda automáticamente
           </p>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -347,8 +436,8 @@ function InduccionContent() {
 export default function InduccionPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0A0E1A' }}>
-        <div className="text-white text-sm">Cargando...</div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F5F7FA' }}>
+        <div className="text-sm font-medium" style={{ color: '#64748B' }}>Cargando...</div>
       </div>
     }>
       <InduccionContent />
