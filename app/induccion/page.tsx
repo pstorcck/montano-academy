@@ -349,13 +349,14 @@ function InduccionContent() {
                     borderRadius: msg.role === 'user' ? '20px 20px 4px 20px' : '4px 20px 20px 20px',
                     boxShadow: msg.role === 'assistant' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'
                   }}>
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
-                  {msg.streaming && (
-                    <span className="inline-flex gap-1 mt-1">
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '0ms' }}></span>
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '150ms' }}></span>
-                      <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '300ms' }}></span>
+                  {msg.streaming && !msg.content ? (
+                    <span className="inline-flex gap-1">
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '0ms' }}></span>
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '150ms' }}></span>
+                      <span className="w-2 h-2 rounded-full animate-bounce" style={{ background: '#94A3B8', animationDelay: '300ms' }}></span>
                     </span>
+                  ) : (
+                    <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
                   )}
                 </div>
               </div>
