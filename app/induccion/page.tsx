@@ -290,10 +290,7 @@ function InduccionContent() {
                 borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px'
               }}>
               <p style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</p>
-              {msg.streaming && (
-                <span className="inline-block w-2 h-4 ml-1 animate-pulse"
-                  style={{ background: branding.primaryColor, borderRadius: 2 }}></span>
-              )}
+
             </div>
           </div>
         ))}
