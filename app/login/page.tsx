@@ -51,7 +51,7 @@ export default function LoginPage() {
               { src: '/logo-vitanova.jpg', alt: 'Vitanova' },
               { src: '/logo-escolaris.png', alt: 'Escolaris' },
             ].map((logo, i) => (
-              <div key={i} className="w-14 h-14 rounded-xl bg-white flex items-center justify-center p-2"
+              <div key={i} className="w-20 h-20 rounded-xl bg-white flex items-center justify-center p-2"
                 style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
                 <img src={logo.src} alt={logo.alt} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               </div>
@@ -133,7 +133,7 @@ export default function LoginPage() {
               { src: '/logo-vitanova.jpg', alt: 'Vitanova' },
               { src: '/logo-escolaris.png', alt: 'Escolaris' },
             ].map((logo, i) => (
-              <div key={i} className="w-10 h-10 rounded-lg bg-white flex items-center justify-center p-1.5 border"
+              <div key={i} className="w-16 h-16 rounded-lg bg-white flex items-center justify-center p-2 border"
                 style={{ borderColor: '#E2E8F0' }}>
                 <img src={logo.src} alt={logo.alt} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
               </div>
