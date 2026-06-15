@@ -170,23 +170,38 @@ function InduccionContent() {
         const lines = buffer.split('\n')
         buffer = lines.pop() || ''
 
+        let pendingChunks = ''
+        let updateTimer: any = null
+
+        const flushChunks = () => {
+          if (pendingChunks) {
+            const toFlush = pendingChunks
+            pendingChunks = ''
+            setMessages(prev => {
+              const updated = [...prev]
+              const last = updated[updated.length - 1]
+              if (last.role === 'assistant') {
+                updated[updated.length - 1] = { ...last, content: last.content + toFlush }
+              }
+              return updated
+            })
+          }
+        }
+
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
 
               if (data.chunk) {
-                setMessages(prev => {
-                  const updated = [...prev]
-                  const last = updated[updated.length - 1]
-                  if (last.role === 'assistant') {
-                    updated[updated.length - 1] = { ...last, content: last.content + data.chunk }
-                  }
-                  return updated
-                })
+                pendingChunks += data.chunk
+                if (updateTimer) clearTimeout(updateTimer)
+                updateTimer = setTimeout(flushChunks, 50)
               }
 
               if (data.done) {
+                if (updateTimer) clearTimeout(updateTimer)
+                flushChunks()
                 setMessages(prev => {
                   const updated = [...prev]
                   const last = updated[updated.length - 1]
