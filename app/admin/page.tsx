@@ -36,6 +36,7 @@ export default function AdminPage() {
   const [loadingModules, setLoadingModules] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [moduleProgressAll, setModuleProgressAll] = useState<any[]>([])
+  const [showUserDetail, setShowUserDetail] = useState<any>(null)
 
   const [newUser, setNewUser] = useState({
     full_name: '', email: '', password: '',
@@ -520,7 +521,7 @@ export default function AdminPage() {
                   <table className="w-full">
                     <thead>
                       <tr style={{ background: '#F8FAFC' }}>
-                        {['Colaborador', 'Empresa', 'Progreso', 'Rol', 'Acciones'].map(h => (
+                        {['Colaborador', 'Empresa', 'Progreso', 'Última sesión', 'Rol', 'Acciones'].map(h => (
                           <th key={h} className="text-left px-6 py-3.5 text-xs font-semibold uppercase tracking-wider"
                             style={{ color: '#94A3B8', borderBottom: '1px solid #F1F5F9' }}>{h}</th>
                         ))}
@@ -672,6 +673,128 @@ export default function AdminPage() {
           )}
         </div>
       </div>
+
+      {/* MODAL DETALLE USUARIO */}
+      {showUserDetail && (() => {
+        const userMods = moduleProgressAll
+          .filter(m => m.user_id === showUserDetail.id && m.company_id === showUserDetail.company_id)
+          .sort((a: any, b: any) => new Date(a.completed_at).getTime() - new Date(b.completed_at).getTime())
+        const userConvs = conversations
+          .filter(c => c.user_id === showUserDetail.id && c.company_id === showUserDetail.company_id)
+          .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
+        const userCert = certificates.find(c => c.user_id === showUserDetail.id && c.company_id === showUserDetail.company_id)
+        const progress = getProgress(showUserDetail.id, showUserDetail.company_id)
+        return (
+          <div className="fixed inset-0 flex items-center justify-center z-50" style={{ background: 'rgba(15,23,42,0.5)' }}>
+            <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-screen">
+              <div className="px-8 py-6 border-b flex items-center justify-between" style={{ borderColor: '#F1F5F9' }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white"
+                    style={{ background: showUserDetail.companies?.primary_color || '#3B5BDB' }}>
+                    {showUserDetail.full_name?.charAt(0)}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold" style={{ color: '#0F172A' }}>{showUserDetail.full_name}</h3>
+                    <p className="text-xs" style={{ color: '#94A3B8' }}>{showUserDetail.email} · {showUserDetail.companies?.name}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowUserDetail(null)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-slate-100"
+                  style={{ color: '#94A3B8' }}>×</button>
+              </div>
+              <div className="px-8 py-6 overflow-y-auto" style={{ maxHeight: '60vh' }}>
+                
+                {/* Resumen */}
+                <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="rounded-xl p-4 text-center" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                    <p className="text-2xl font-black" style={{ color: '#0F172A' }}>{userMods.length}</p>
+                    <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Módulos completados</p>
+                  </div>
+                  <div className="rounded-xl p-4 text-center" style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                    <p className="text-2xl font-black" style={{ color: '#0F172A' }}>{userConvs.length}</p>
+                    <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Sesiones</p>
+                  </div>
+                  <div className="rounded-xl p-4 text-center" style={{ background: userCert ? '#F0FDF4' : '#F8FAFC', border: `1px solid ${userCert ? '#BBF7D0' : '#E2E8F0'}` }}>
+                    <p className="text-2xl font-black" style={{ color: userCert ? '#166534' : '#0F172A' }}>{userCert ? '✓' : '—'}</p>
+                    <p className="text-xs mt-1" style={{ color: '#94A3B8' }}>Certificado</p>
+                  </div>
+                </div>
+
+                {/* Módulos completados */}
+                {userMods.length > 0 && (
+                  <div className="mb-5">
+                    <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#94A3B8' }}>Módulos completados</p>
+                    <div className="space-y-2">
+                      {userMods.map((mod: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-3 rounded-xl"
+                          style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-green-600 text-sm">✓</span>
+                            <p className="text-sm font-medium" style={{ color: '#0F172A' }}>{mod.module_name}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xs font-bold" style={{ color: '#166534' }}>{mod.score}/100</p>
+                            <p className="text-xs" style={{ color: '#94A3B8' }}>
+                              {new Date(mod.completed_at).toLocaleDateString('es-GT', { month: 'short', day: 'numeric' })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Historial de sesiones */}
+                {userConvs.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#94A3B8' }}>Historial de sesiones</p>
+                    <div className="space-y-2">
+                      {userConvs.slice(0, 5).map((conv: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between p-3 rounded-xl"
+                          style={{ background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">◎</span>
+                            <p className="text-xs font-medium" style={{ color: '#475569' }}>
+                              {new Date(conv.started_at).toLocaleDateString('es-GT', { 
+                                year: 'numeric', month: 'long', day: 'numeric' 
+                              })}
+                            </p>
+                          </div>
+                          <span className="text-xs font-semibold px-2 py-1 rounded-lg"
+                            style={{
+                              background: conv.status === 'completed' ? '#DCFCE7' : '#FEF9C3',
+                              color: conv.status === 'completed' ? '#166534' : '#854D0E'
+                            }}>
+                            {conv.status === 'completed' ? 'Completado' : 'En progreso'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {userMods.length === 0 && userConvs.length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-sm" style={{ color: '#94A3B8' }}>Este colaborador aún no ha iniciado su inducción.</p>
+                  </div>
+                )}
+              </div>
+              <div className="px-8 py-5 border-t flex gap-3" style={{ borderColor: '#F1F5F9', background: '#F8FAFC' }}>
+                <button onClick={() => handleGenerateCert(showUserDetail.id, showUserDetail.company_id)}
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold text-white"
+                  style={{ background: '#3B5BDB' }}>
+                  Generar certificado
+                </button>
+                <button onClick={() => setShowUserDetail(null)}
+                  className="flex-1 py-3 rounded-xl text-sm font-semibold border hover:bg-white transition-all"
+                  style={{ borderColor: '#E2E8F0', color: '#475569' }}>
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* MODAL CREAR USUARIO */}
       {showCreateUser && (
