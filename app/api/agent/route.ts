@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
               }
 
               // Detectar módulo aprobado
-              const moduleMatch = fullMessage.match(/MODULO_APROBADO[\s\S]*?modulo:\s*(.+?)[\n\r]/i)
+              const moduleMatch = fullMessage.match(/MODULO_APROBADO[\s\S]*?modulo:\s*(.+?)\s*[\n\r]/i)
               const modulePunteoMatch = fullMessage.match(/MODULO_APROBADO[\s\S]*?punteo:\s*(\d+)/i)
 
               if (moduleMatch && conversation_id) {
