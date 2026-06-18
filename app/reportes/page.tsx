@@ -216,7 +216,61 @@ function ReportesContent() {
           ))}
         </div>
 
-        <p className="text-center text-xs mt-8" style={{ color: '#CBD5E1' }}>
+        {/* Listado de personal */}
+        <div className="mt-8 bg-white rounded-2xl border overflow-hidden" style={{ borderColor: '#E8ECF0' }}>
+          <div className="px-6 py-4 border-b" style={{ borderColor: '#F1F5F9' }}>
+            <h2 className="text-sm font-bold" style={{ color: '#0F172A' }}>Listado de personal</h2>
+            <p className="text-xs mt-0.5" style={{ color: '#94A3B8' }}>{users.length} colaboradores registrados</p>
+          </div>
+          <table className="w-full">
+            <thead>
+              <tr style={{ background: '#F8FAFC' }}>
+                {['Nombre', 'Empresa', 'Estado'].map(h => (
+                  <th key={h} className="text-left px-6 py-3.5 text-xs font-bold uppercase tracking-wider" style={{ color: '#94A3B8', borderBottom: '1px solid #F1F5F9' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users
+                .sort((a: any, b: any) => (a.companies?.name || '').localeCompare(b.companies?.name || ''))
+                .map((u: any, i: number) => {
+                  const hasCert = certs.some((c: any) => c.user_id === u.id)
+                  const hasMod = modProg.some((m: any) => m.user_id === u.id)
+                  const hasConv = convs.some((c: any) => c.user_id === u.id)
+                  const status = hasCert
+                    ? { label: '✓ Certificado', bg: '#DCFCE7', color: '#166534' }
+                    : hasMod || hasConv
+                    ? { label: '▶ En progreso', bg: '#FEF9C3', color: '#854D0E' }
+                    : { label: '○ Sin iniciar', bg: '#F1F5F9', color: '#64748B' }
+                  return (
+                    <tr key={u.id} style={{ borderBottom: i < users.length - 1 ? '1px solid #F8FAFC' : 'none' }}>
+                      <td className="px-6 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                            style={{ background: u.companies?.primary_color || '#3B5BDB' }}>
+                            {u.full_name?.charAt(0)}
+                          </div>
+                          <p className="text-sm font-medium" style={{ color: '#0F172A' }}>{u.full_name}</p>
+                        </div>
+                      </td>
+                      <td className="px-6 py-3.5">
+                        <span className="text-xs font-medium px-2.5 py-1 rounded-lg" style={{ background: '#F1F5F9', color: '#475569' }}>
+                          {u.companies?.name}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3.5">
+                        <span className="text-xs font-semibold px-2.5 py-1.5 rounded-lg" style={{ background: status.bg, color: status.color }}>
+                          {status.label}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-center text-xs mt-6" style={{ color: '#CBD5E1' }}>
           montano.academy · Reporte generado el {new Date().toLocaleDateString('es-GT', { year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </div>
