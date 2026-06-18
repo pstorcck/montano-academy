@@ -129,6 +129,14 @@ export async function POST(req: NextRequest) {
                   conversation_id,
                 }, { onConflict: 'user_id,company_id,module_name' })
 
+                // Intentar generar certificado automáticamente via función SQL
+                const { data: certResult } = await supabase.rpc('check_and_generate_certificate', {
+                  p_user_id: user_id,
+                  p_company_id: company.id,
+                  p_agent_slug: agent_slug || 'cultura'
+                })
+                console.log('Cert check:', certResult)
+
                 // Verificar si completó todos los módulos
                 const requiredModules: string[] = agentConfig.required_modules || []
                 const newCompleted = [...completedModuleNames, moduleName]
