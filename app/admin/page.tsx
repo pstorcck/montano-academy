@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [userModules, setUserModules] = useState<any[]>([])
   const [loadingModules, setLoadingModules] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [moduleProgressAll, setModuleProgressAll] = useState<any[]>([])
 
   const [newUser, setNewUser] = useState({
     full_name: '', email: '', password: '',
@@ -69,6 +70,11 @@ export default function AdminPage() {
       setCertificates(cert || [])
       setConversations(conv || [])
       setMessages(msgs || [])
+
+      const { data: modProg } = await supabase
+        .from('module_progress')
+        .select('user_id, company_id, module_name, score, completed_at')
+      setModuleProgressAll(modProg || [])
       setLoading(false)
     }
     init()
@@ -76,12 +82,37 @@ export default function AdminPage() {
 
   const getProgress = (userId: string, companyId: string) => {
     const cert = certificates.find(c => c.user_id === userId && c.company_id === companyId)
-    if (cert) return { status: 'completed', score: cert.score, label: `Completado · ${cert.score}/100` }
+    const company = companies.find(c => c.id === companyId)
+    const userMods = moduleProgressAll.filter(m => m.user_id === userId && m.company_id === companyId)
+    
+    // Obtener total de módulos requeridos para esta empresa
+    const totalModules = company?.slug === 'vitanova' ? 9 : 
+                        company?.slug === 'escolaris' ? 6 :
+                        company?.slug === 'colegio-montano' ? 5 :
+                        company?.slug === 'mac' ? 2 : 0
+
+    if (cert) return { 
+      status: 'completed', 
+      score: cert.score, 
+      label: totalModules > 0 ? `${totalModules}/${totalModules} módulos · ${cert.score}/100` : `Completado · ${cert.score}/100`,
+      modules: userMods.length,
+      total: totalModules
+    }
+    
+    if (userMods.length > 0) return { 
+      status: 'active', 
+      label: `${userMods.length}/${totalModules} módulos completados`,
+      modules: userMods.length,
+      total: totalModules
+    }
+
     const conv = conversations.find(c => c.user_id === userId && c.company_id === companyId)
-    if (!conv) return { status: 'pending', label: 'Sin iniciar' }
+    if (!conv) return { status: 'pending', label: 'Sin iniciar', modules: 0, total: totalModules }
+    
     const msgCount = messages.filter(m => m.conversation_id === conv.id).length
-    if (msgCount > 0) return { status: 'active', label: `En progreso · ${msgCount} msg` }
-    return { status: 'pending', label: 'Sin iniciar' }
+    if (msgCount > 0) return { status: 'active', label: `En progreso · ${msgCount} msg`, modules: 0, total: totalModules }
+    
+    return { status: 'pending', label: 'Sin iniciar', modules: 0, total: totalModules }
   }
 
   const handleCreateUser = async () => {
