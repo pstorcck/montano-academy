@@ -120,6 +120,17 @@ body { margin: 0; padding: 0; background: #F0EEE8; font-family: 'Helvetica Neue'
 </html>`
     })
 
+    // Sincronizar a Monday automáticamente
+    try {
+      await fetch('https://montano.academy/api/monday/sync-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: authData.user.id })
+      })
+    } catch (e) {
+      console.log('Monday sync error:', e)
+    }
+
     return NextResponse.json({ success: true, tempPassword })
 
   } catch (error: any) {
